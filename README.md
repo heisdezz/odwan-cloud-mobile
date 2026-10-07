@@ -12,14 +12,11 @@ bun run typecheck
 ## Android release builds
 
 ```sh
-# Installable release APK
-bunx eas-cli build --platform android --profile preview
-
-# Google Play app bundle
-bunx eas-cli build --platform android --profile production
+# Generate and compile locally using the installed Android SDK
+bunx expo run:android --variant release
 ```
 
-First-time EAS setup requires signing in, linking an Expo project, and choosing an Android application ID and signing credentials.
+Release builds require a local Android SDK and JDK. Configure production signing through a config plugin before distributing a release; the generated template's debug signing is for testing.
 
 Android builds target **arm64-v8a only**. They cannot run on 32-bit ARM devices or x86/x86_64 emulators. To restore other architectures, edit `buildArchs` in `app.json`.
 
@@ -88,14 +85,11 @@ The media-library config plugin requests photo/video permissions without locatio
 
 ## Debug APK from GitHub Actions
 
-Run **Actions → Android debug APK → Run workflow**. The workflow installs from `bun.lock`, caches Bun downloads, runs lint/typecheck/tests, and builds on EAS cloud using the `debug` profile. Only ARM64 is built. The APK is attached to the workflow run as `odwan-debug-arm64-<run number>` for seven days, without redundant ZIP compression. Builds are manual and serialized per branch to avoid wasting EAS quota. EAS retains its normal native build caches; GitHub does not generate or commit native projects.
+Every push to `dev` runs **Android debug APK**. You can also start it manually under **Actions → Android debug APK → Run workflow**. No Expo account, EAS, access token, or project ID is required.
 
-One-time repository configuration under **Settings → Secrets and variables → Actions**:
+The workflow installs from `bun.lock`, runs lint/typecheck/tests, sets up Java 21 and Android SDK 36, generates the Android project with Expo prebuild, and invokes Gradle `:app:assembleDebug` directly on GitHub's runner. It caches Bun downloads and Gradle dependencies/build state, limits build workers to two, and cancels obsolete builds on the same branch. Only ARM64 is built. The APK is attached to the workflow run as `odwan-debug-arm64-<run number>` for seven days, without redundant ZIP compression. Generated native projects remain ignored by Git.
 
-- Secret `EXPO_TOKEN`: an Expo access token that can build your project.
-- Variable `EXPO_PROJECT_ID`: the UUID of the Expo project for this app (slug `odwan`). Create the project in your Expo account first if necessary. `app.config.ts` reads this value; no access token is included in app config.
-
-The debug APK uses `expo-dev-client`, the debug keystore, and `:app:assembleDebug`; production signing credentials are not required. Install it on an ARM64 phone, run `bunx expo start --dev-client`, and connect from the launcher. It needs Metro and is larger than the optimized release APK. Use `preview` for a standalone APK with the bundled JavaScript and release shrinking. The Android application ID is `com.heisdezz.odwan`.
+The debug APK includes `expo-dev-client` and uses the generated debug keystore. Install it on an ARM64 phone, run `bunx expo start --dev-client`, and connect from the launcher. It needs Metro and is larger than the optimized release APK. The Android application ID is `com.heisdezz.odwan`.
 
 ## Media and overlay components
 

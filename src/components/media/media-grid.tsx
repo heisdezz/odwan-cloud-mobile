@@ -4,6 +4,7 @@ import { useMediaViewer } from "@/providers/media-viewer-provider";
 import { remoteViewerItem } from "@/helpers/media-viewer";
 import { GridZoom } from "./grid-zoom";
 import { MediaThumbnail } from "./media-thumbnail";
+import { MediaTileBadges } from "./media-tile-badges";
 import { useServerStore } from "@/stores/server-store";
 import { Button } from "@/components/ui";
 import { BottomTabInset } from "@/constants/theme";
@@ -89,6 +90,7 @@ const MediaTile = memo(function MediaTile({
           </Text>
         </View>
       )}
+      <MediaTileBadges video={video} />
     </Pressable>
   );
 });

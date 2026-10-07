@@ -5,6 +5,7 @@ import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { MediaThumbnail } from '@/components/media/media-thumbnail';
+import { MediaTileBadges } from '@/components/media/media-tile-badges';
 import { presentPermissionsPicker } from '@/lib/device-media.native';
 import { useGallerySync } from '@/providers/gallery-sync-provider.native';
 import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from 'react-native';
@@ -23,7 +24,7 @@ const EMPTY_ASSETS: LocalAsset[] = [];
 
 function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
-  return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
+  return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.mediaType === 'video' ? 'Video' : 'Photo'}: ${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     width: size - 4, height: size - 4,
     backgroundColor: colors.backgroundElement,
   })}>
@@ -32,9 +33,7 @@ function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: 
         <Text style={tw.style('text-sm font-medium', { color: colors.text })}>{asset.mediaType === 'video' ? 'Video' : 'Preview unavailable'}</Text>
         <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>{asset.filename}</Text>
       </View>}
-    <View style={tw`absolute bottom-1 left-1 right-1 rounded px-1 py-1 bg-black/70`}>
-      <Text style={tw`text-white text-xs`} numberOfLines={1}>{backupLabel(status)}</Text>
-    </View>
+    <MediaTileBadges video={asset.mediaType === 'video'} showBackup status={status} />
   </Pressable>;
 }
 

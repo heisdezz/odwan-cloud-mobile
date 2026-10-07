@@ -42,8 +42,5 @@ function ActiveThumbnail({ source, cacheKey, name, video = false }: MediaThumbna
           <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>Retry preview</Text>
         </Pressable>}
       </View>}
-    {video && <View pointerEvents="none" style={tw`absolute top-1 right-1 bg-black/70 rounded p-1`}>
-      <Image source={require('@/assets/images/tabIcons/explore-outline.svg')} tintColor="white" style={tw`h-4 w-4`} contentFit="contain" />
-    </View>}
   </View>;
 }

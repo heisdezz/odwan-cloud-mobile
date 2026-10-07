@@ -6,6 +6,7 @@ import { addListener, loadDeviceMedia, usePermissions, type GalleryCursor } from
 import { clearGalleryIndex, finishGalleryScan, getLocalDatabase, indexGalleryPage, readGalleryPage } from '@/db/local-store.native';
 import { scanGallery } from '@/lib/gallery-sync';
 import { extract_message } from '@/helpers/api';
+import { toast } from 'sonner-native';
 
 function useGallerySyncState() {
   const client = useQueryClient();
@@ -36,9 +37,13 @@ function useGallerySyncState() {
     const controller = new AbortController();
     const signal = controller.signal;
     const scanId = `${Date.now()}-${Math.random()}`;
+    const toastId = `gallery-sync-${scanId}`;
+    let scanned = 0;
+    let lastProgress = 0;
     const job = tail.current.catch(() => {}).then(async () => {
       if (signal.aborted) return;
       setSync({ running: true, count: 0, error: '' });
+      toast.loading('Syncing phone gallery…', { id: toastId, description: 'Preparing scan', duration: Infinity });
       // Limited selections can change without a different permission status.
       // Revalidate them instead of exposing records from an older selection.
       if (limited) {
@@ -49,12 +54,16 @@ function useGallerySyncState() {
       const cached = await readGalleryPage();
       const initialScan = cached.assets.length === 0;
       let lastUpdate = 0;
-      await scanGallery<GalleryCursor>({ initialCursor: 0, signal, load: loadDeviceMedia,
+      const count = await scanGallery<GalleryCursor>({ initialCursor: 0, signal, load: loadDeviceMedia,
         write: (assets) => indexGalleryPage(assets, scanId),
         finish: () => finishGalleryScan(scanId, signal),
-        onPage: () => {
-          // Progress isn't displayed as a count. Avoid rerendering the whole
-          // gallery/context and rebuilding all zoom layers for every batch.
+        onPage: (count) => {
+          scanned = count;
+          // Update only the toast, not every gallery/context subscriber.
+          if (!signal.aborted && Date.now() - lastProgress >= 1000) {
+            lastProgress = Date.now();
+            toast.loading('Syncing phone gallery…', { id: toastId, description: `${count.toLocaleString()} items scanned`, duration: Infinity });
+          }
           if (!initialScan || signal.aborted || Date.now() - lastUpdate < 5000) return;
           lastUpdate = Date.now();
           void client.invalidateQueries({ queryKey: ['device-gallery'] });
@@ -63,13 +72,19 @@ function useGallerySyncState() {
       if (!signal.aborted) {
         await client.invalidateQueries({ queryKey: ['device-gallery'] });
         await client.invalidateQueries({ queryKey: ['backup-status'] });
-        setSync((value) => ({ ...value, running: false }));
+        if (signal.aborted) return;
+        setSync({ running: false, count, error: '' });
+        toast.success('Gallery synced', { id: toastId, description: `${count.toLocaleString()} items scanned`, duration: 3000 });
       }
     }).catch((error) => {
-      if (!signal.aborted) setSync((value) => ({ ...value, running: false, error: extract_message(error) }));
-    });
+      if (!signal.aborted) {
+        const message = extract_message(error);
+        setSync({ running: false, count: scanned, error: message });
+        toast.error('Gallery sync failed', { id: toastId, description: message, duration: 5000 });
+      }
+    }).finally(() => { if (signal.aborted) toast.dismiss(toastId); });
     tail.current = job;
-    return () => { controller.abort(); };
+    return () => { controller.abort(); toast.dismiss(toastId); };
   }, [allowed, limited, database.isSuccess, checking, epoch, client]);
 
   useEffect(() => {

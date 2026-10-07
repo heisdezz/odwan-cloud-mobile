@@ -6,6 +6,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 
 import { clampColumns, gridPinchTarget, gridWindow } from '@/helpers/grid-zoom';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
+import { useGridStore } from '@/stores/grid-store';
 
 type GridZoomProps<T> = {
   data: T[];
@@ -26,7 +27,9 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   const window = useWindowDimensions();
   const colors = useTheme();
   const [viewport, setViewport] = useState({ width: window.width, height: window.height });
-  const [columns, setColumns] = useState(() => clampColumns(Math.floor(window.width / 150)));
+  const savedColumns = useGridStore((state) => state.columns);
+  const setColumns = useGridStore((state) => state.setColumns);
+  const columns = savedColumns ?? clampColumns(Math.floor(window.width / 150));
   const size = viewport.width / columns;
   const top = contentInsets?.top ?? 0, bottom = contentInsets?.bottom ?? 0;
   const list = useRef<FlashListRef<T>>(null);
@@ -59,7 +62,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     }
     pending.current = target;
     setColumns(target.columns);
-  }, [data.length, columns, viewport.width, viewport.height, top, bottom, scale, busy]);
+  }, [data.length, columns, viewport.width, viewport.height, top, bottom, scale, busy, setColumns]);
   const pinch = Gesture.Pinch().enabled(data.length > 0)
     .simultaneousWithExternalGesture(nativeScroll)
     .onStart((event) => {

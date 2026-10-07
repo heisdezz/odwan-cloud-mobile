@@ -74,10 +74,6 @@ function GalleryContent() {
   </View>;
   return <View style={tw`flex-1`}>
     {!cacheReadable ? <ActivityIndicator color={colors.text} style={tw`py-4`} /> : null}
-    {sync.running && <View style={tw`flex-row items-center gap-2 px-6 py-2`}>
-      <ActivityIndicator size="small" color={colors.textSecondary} />
-      <Text style={tw.style('text-sm', { color: colors.textSecondary })}>Updating phone gallery…</Text>
-    </View>}
     {sync.error && <View style={tw`px-6 py-2 gap-2`}>
       <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{sync.error}</Text>
       <Button variant="text" label="Retry gallery sync" onPress={() => { void refresh().catch((error) => toast.error(extract_message(error))); }} />

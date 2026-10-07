@@ -9,6 +9,6 @@ export default function DeviceAlbumScreen() {
   const colors = useTheme();
   return <View style={tw.style('flex-1', { backgroundColor: colors.background })}>
     <Stack.Screen options={{ title: title || 'Device album' }} />
-    <LocalAlbumGallery id={id} />
+    <LocalAlbumGallery id={id} title={title} />
   </View>;
 }

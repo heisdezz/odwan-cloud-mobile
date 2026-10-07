@@ -57,6 +57,27 @@ export type LocalAsset = {
   id: string; modifiedAt: number; filename: string; uri: string;
   mediaType: string; width: number; height: number; createdAt: number;
 };
+
+export const UPLOAD_QUEUE_MIGRATION = `
+CREATE TABLE IF NOT EXISTS upload_queue (
+  id TEXT PRIMARY KEY NOT NULL,
+  server_url TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  modified_at REAL NOT NULL,
+  asset_json TEXT NOT NULL,
+  album_id TEXT NOT NULL,
+  album_name TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('queued','uploading','organizing','success','error')),
+  result_json TEXT,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE(server_url, account_id, asset_id, modified_at, album_id)
+);
+CREATE INDEX IF NOT EXISTS upload_queue_scope ON upload_queue(server_url, account_id, state, created_at);
+PRAGMA user_version = 4;
+`;
 export type BackupStatus = 'pending' | 'uploading' | 'backed_up' | 'error';
 export type BackupScope = { serverUrl: string; accountId: string };
 export const backupLabel = (status?: BackupStatus) => !status ? 'Not tracked' : ({ pending: 'Not backed up', uploading: 'Uploading', backed_up: 'Backed up', error: 'Backup failed' })[status];

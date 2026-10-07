@@ -1,4 +1,5 @@
 import type { LocalAsset } from '@/db/schema';
+import { waitForGalleryIdle } from './gallery-scheduler';
 
 /** Only a complete, uncancelled scan can remove unseen gallery entries. */
 export async function scanGallery<Cursor>(options: {
@@ -8,11 +9,14 @@ export async function scanGallery<Cursor>(options: {
   write: (assets: LocalAsset[]) => Promise<unknown>;
   finish: () => Promise<unknown>;
   onPage?: (count: number) => void;
+  waitForTurn?: () => Promise<void>;
 }) {
   let cursor: Cursor | undefined = options.initialCursor;
   let count = 0;
   const visited = new Set<Cursor>();
   while (cursor !== undefined) {
+    if (options.signal.aborted) throw new Error('Gallery sync cancelled.');
+    await (options.waitForTurn?.() ?? waitForGalleryIdle(options.signal));
     if (options.signal.aborted) throw new Error('Gallery sync cancelled.');
     if (visited.has(cursor)) throw new Error('Media library returned a repeated page cursor.');
     visited.add(cursor);
@@ -22,8 +26,6 @@ export async function scanGallery<Cursor>(options: {
     count += page.assets.length;
     options.onPage?.(count);
     cursor = page.next;
-    // Yield between batches rather than consuming the JS frame budget.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
   if (options.signal.aborted) throw new Error('Gallery sync cancelled.');
   await options.finish();

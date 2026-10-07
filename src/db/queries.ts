@@ -26,3 +26,17 @@ export const READ_GALLERY_SQL = `SELECT a.id, a.modified_at AS modifiedAt, a.fil
   FROM local_assets a JOIN gallery_index g ON a.id=g.asset_id AND a.modified_at=g.modified_at
   ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
 export const FINISH_GALLERY_SCAN_SQL = 'DELETE FROM gallery_index WHERE scan_id != ?';
+
+// Decode one bound JSON page on SQLite's native I/O queue, rather than crossing
+// back into JS for two individual writes per asset. Keep the same upsert rules.
+export const BULK_INDEXED_ASSETS_SQL = UPSERT_INDEXED_ASSET_SQL.replace(
+  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  `SELECT json_extract(value,'$.id'), json_extract(value,'$.modifiedAt'),
+    json_extract(value,'$.filename'), json_extract(value,'$.uri'), json_extract(value,'$.mediaType'),
+    json_extract(value,'$.width'), json_extract(value,'$.height'), json_extract(value,'$.createdAt'), ?
+    FROM json_each(?) WHERE true`,
+);
+export const BULK_GALLERY_INDEX_SQL = UPSERT_GALLERY_INDEX_SQL.replace(
+  'VALUES (?, ?, ?)',
+  `SELECT json_extract(value,'$.id'), json_extract(value,'$.modifiedAt'), ? FROM json_each(?) WHERE true`,
+);

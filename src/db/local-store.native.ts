@@ -1,4 +1,5 @@
-import { UPSERT_LOCAL_ASSET_SQL, UPSERT_INDEXED_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, UPSERT_GALLERY_INDEX_SQL, READ_GALLERY_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
+import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
+import { writeGalleryBatch } from './gallery-index';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
@@ -36,12 +37,7 @@ export function rememberAssets(assets: LocalAsset[]) {
 
 /** Short queued transactions let gallery reads run between scan batches. */
 export function indexGalleryPage(assets: LocalAsset[], scanId: string) {
-  return access.run((db) => db.withTransactionAsync(async () => {
-    await writeAssets(db, assets, UPSERT_INDEXED_ASSET_SQL);
-    const statement = await db.prepareAsync(UPSERT_GALLERY_INDEX_SQL);
-    try { for (const asset of assets) await statement.executeAsync(asset.id, asset.modifiedAt, scanId); }
-    finally { await statement.finalizeAsync(); }
-  }));
+  return access.run((db) => writeGalleryBatch(db, assets, scanId));
 }
 export function finishGalleryScan(scanId: string, signal?: AbortSignal) {
   return access.run((db) => {

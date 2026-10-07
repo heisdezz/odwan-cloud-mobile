@@ -52,11 +52,12 @@ function useGallerySyncState() {
       await scanGallery<GalleryCursor>({ initialCursor: 0, signal, load: loadDeviceMedia,
         write: (assets) => indexGalleryPage(assets, scanId),
         finish: () => finishGalleryScan(scanId, signal),
-        onPage: (count) => {
-          if (signal.aborted || Date.now() - lastUpdate < 750) return;
+        onPage: () => {
+          // Progress isn't displayed as a count. Avoid rerendering the whole
+          // gallery/context and rebuilding all zoom layers for every batch.
+          if (!initialScan || signal.aborted || Date.now() - lastUpdate < 5000) return;
           lastUpdate = Date.now();
-          setSync({ running: true, count, error: '' });
-          if (initialScan) void client.invalidateQueries({ queryKey: ['device-gallery'] });
+          void client.invalidateQueries({ queryKey: ['device-gallery'] });
         },
       });
       if (!signal.aborted) {

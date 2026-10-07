@@ -1,15 +1,11 @@
 import { expect, test } from 'bun:test';
-import { columnsAfterPinch } from '../src/helpers/grid-zoom';
+import { clampColumns } from '../src/helpers/grid-zoom';
 import { createTaskQueue } from '../src/lib/task-queue';
 
-test('pinches change density in the expected direction and stay within usable limits', () => {
-  expect(columnsAfterPinch(3, 1.3)).toBe(2);
-  expect(columnsAfterPinch(3, 1 / 1.3)).toBe(4);
-  expect(columnsAfterPinch(3, 1.02)).toBe(3);
-  expect(columnsAfterPinch(2, 10)).toBe(2);
-  expect(columnsAfterPinch(6, 0.1)).toBe(6);
-  expect(columnsAfterPinch(3, 0)).toBe(3);
-  expect(columnsAfterPinch(3, NaN)).toBe(3);
+test('initial grid density stays within two to six columns', () => {
+  expect(clampColumns(1)).toBe(2);
+  expect(clampColumns(3)).toBe(3);
+  expect(clampColumns(20)).toBe(6);
 });
 
 test('thumbnail queue limits simultaneous work and skips cancelled offscreen requests', async () => {

@@ -1,6 +1,4 @@
-export const LOCAL_STORE_SCHEMA = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+export const LOCAL_STORE_TABLES = `
 CREATE TABLE IF NOT EXISTS local_assets (
   id TEXT NOT NULL,
   modified_at REAL NOT NULL,
@@ -29,6 +27,9 @@ CREATE TABLE IF NOT EXISTS backup_status (
 );
 PRAGMA user_version = 1;
 `;
+
+// Used by standalone SQL consumers/tests. Runtime startup configures pragmas before migration.
+export const LOCAL_STORE_SCHEMA = `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; ${LOCAL_STORE_TABLES}`;
 
 export type LocalAsset = {
   id: string; modifiedAt: number; filename: string; uri: string;

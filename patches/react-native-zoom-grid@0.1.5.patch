@@ -1,0 +1,249 @@
+diff --git a/node_modules/react-native-zoom-grid/.bun-tag-61279e5818dcb73e b/.bun-tag-61279e5818dcb73e
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/node_modules/react-native-zoom-grid/.bun-tag-81bcfa6984cc7c46 b/.bun-tag-81bcfa6984cc7c46
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/lib/commonjs/ZoomGridList.js b/lib/commonjs/ZoomGridList.js
+index 4b60258fa9e71831ebc890d06d20a6109b3cde14..f02516cd8bef489e802af71be09678e83cda2413 100644
+--- a/lib/commonjs/ZoomGridList.js
++++ b/lib/commonjs/ZoomGridList.js
+@@ -7,7 +7,7 @@ exports.ZoomGridList = void 0;
+ var _react = _interopRequireWildcard(require("react"));
+ var _reactNative = require("react-native");
+ var _reactNativeReanimated = _interopRequireDefault(require("react-native-reanimated"));
+-var _list = require("@legendapp/list");
++var _list = require("@legendapp/list/react-native");
+ var _jsxRuntime = require("react/jsx-runtime");
+ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+ function _interopRequireWildcard(e, t) { if ("function" == typeof WeakMap) var r = new WeakMap(), n = new WeakMap(); return (_interopRequireWildcard = function (e, t) { if (!t && e && e.__esModule) return e; var o, i, f = { __proto__: null, default: e }; if (null === e || "object" != typeof e && "function" != typeof e) return f; if (o = t ? n : r) { if (o.has(e)) return o.get(e); o.set(e, f); } for (const t in e) "default" !== t && {}.hasOwnProperty.call(e, t) && ((i = (o = Object.defineProperty) && Object.getOwnPropertyDescriptor(e, t)) && (i.get || i.set) ? o(f, t, i) : f[t] = e[t]); return f; })(e, t); }
+diff --git a/lib/module/ZoomGridList.js b/lib/module/ZoomGridList.js
+index 15b95765cdab51a98da5f296b01d44fe212b4729..a5cb0359bf17af452c4036c3429589ea924bfbd8 100644
+--- a/lib/module/ZoomGridList.js
++++ b/lib/module/ZoomGridList.js
+@@ -3,7 +3,7 @@
+ import React, { forwardRef } from 'react';
+ import { View, Dimensions } from 'react-native';
+ import Animated from 'react-native-reanimated';
+-import { LegendList } from '@legendapp/list';
++import { LegendList } from '@legendapp/list/react-native';
+ import { jsx as _jsx } from "react/jsx-runtime";
+ const {
+   width
+diff --git a/lib/typescript/ZoomGrid.d.ts b/lib/typescript/ZoomGrid.d.ts
+index b3bad90c1f24d8d74d0d487b1499630196aef6d8..bd85c4f651bd06ad51f842469c222446baaf499b 100644
+--- a/lib/typescript/ZoomGrid.d.ts
++++ b/lib/typescript/ZoomGrid.d.ts
+@@ -1,6 +1,6 @@
+ import React from 'react';
+ import { ViewStyle } from 'react-native';
+-import { LegendListProps } from '@legendapp/list';
++import { LegendListProps } from '@legendapp/list/react-native';
+ export declare const DEBUG = false;
+ export interface ZoomGridProps<T> extends Omit<LegendListProps<T>, 'renderItem'> {
+     zoomLevels?: number[];
+diff --git a/lib/typescript/ZoomGridList.d.ts b/lib/typescript/ZoomGridList.d.ts
+index 1cfc3b7eab96947980832daeba45a99e1761b878..c3e12942e92010c1cec29fe93ea507b18ef2ad23 100644
+--- a/lib/typescript/ZoomGridList.d.ts
++++ b/lib/typescript/ZoomGridList.d.ts
+@@ -1,5 +1,5 @@
+ import React from 'react';
+-import { LegendListProps } from '@legendapp/list';
++import { LegendListProps } from '@legendapp/list/react-native';
+ export interface ZoomGridListProps<T> extends Omit<LegendListProps<T>, 'renderItem'> {
+     numColumns: number;
+     isPinching?: React.MutableRefObject<boolean>;
+diff --git a/src/ZoomGrid.tsx b/src/ZoomGrid.tsx
+index 1eccef44e4f1e185042a096dc34699a7dc14e841..6f7d0de4ecc59c282f2ef7f3e247ac9541924c0c 100644
+--- a/src/ZoomGrid.tsx
++++ b/src/ZoomGrid.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
+-import { Dimensions, StyleSheet, View, ViewStyle } from 'react-native';
++import { useWindowDimensions, StyleSheet, View, ViewStyle } from 'react-native';
+ import Animated, {
+     useSharedValue,
+     useAnimatedStyle,
+@@ -11,9 +11,8 @@ import Animated, {
+ import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ import { ZoomGridList } from './ZoomGridList';
+-import { LegendListProps } from '@legendapp/list';
++import { LegendListProps } from '@legendapp/list/react-native';
+ 
+-const { width, height } = Dimensions.get('window');
+ const DEFAULT_ZOOM_LEVELS = [5, 3, 1];
+ const ZOOM_COLORS = ['#00FF00', '#0000FF', '#FF0000', '#00FFFF', '#FF00FF'];
+ 
+@@ -43,6 +42,9 @@ export function ZoomGrid<T>({
+     contentInsets,
+     ...rest
+ }: ZoomGridProps<T>) {
++    const window = useWindowDimensions();
++    const [viewport, setViewport] = useState({ width: window.width, height: window.height });
++    const { width, height } = viewport;
+     const insets = useSafeAreaInsets();
+ 
+     // Default insets logic if not provided - try to be somewhat smart but unopinionated?
+@@ -130,6 +132,7 @@ export function ZoomGrid<T>({
+     };
+ 
+     const handleZoomFinish = (nextCols: number) => {
++        setIsPinching(false);
+         const config = layerConfigRef.current;
+         if (config[nextCols]) {
+             activeScrollOffset.value = config[nextCols].scrollOffset;
+@@ -193,10 +196,13 @@ export function ZoomGrid<T>({
+             runOnJS(prepareZoom)(e.focalX, e.focalY);
+         })
+         .onUpdate((e) => {
+-            scale.value = savedScale.value * e.scale;
++            const currentIndex = zoomLevels.indexOf(activeColumns);
++            const descending = zoomLevels[0] > zoomLevels[zoomLevels.length - 1];
++            const smaller = zoomLevels[currentIndex + (descending ? 1 : -1)] ?? activeColumns;
++            const larger = zoomLevels[currentIndex + (descending ? -1 : 1)] ?? activeColumns;
++            scale.value = Math.max(activeColumns / larger, Math.min(activeColumns / smaller, savedScale.value * e.scale));
+         })
+         .onEnd(() => {
+-            runOnJS(setIsPinching)(false);
+             const s = scale.value;
+             let nextCols = activeColumns;
+ 
+@@ -212,14 +218,18 @@ export function ZoomGrid<T>({
+                 // Determine if zoomLevels are descending or ascending
+                 const isDescending = zoomLevels[0] > zoomLevels[zoomLevels.length - 1];
+ 
+-                if (s > 1.5) {
++                const inIndex = currentIndex + (isDescending ? 1 : -1);
++                const outIndex = currentIndex + (isDescending ? -1 : 1);
++                const inThreshold = zoomLevels[inIndex] ? Math.sqrt(activeColumns / zoomLevels[inIndex]) : Infinity;
++                const outThreshold = zoomLevels[outIndex] ? Math.sqrt(activeColumns / zoomLevels[outIndex]) : 0;
++                if (s > inThreshold) {
+                     // Zoom In (Bigger items -> Fewer columns)
+                     if (isDescending) {
+                         if (currentIndex < zoomLevels.length - 1) nextCols = zoomLevels[currentIndex + 1];
+                     } else {
+                         if (currentIndex > 0) nextCols = zoomLevels[currentIndex - 1];
+                     }
+-                } else if (s < 0.6) {
++                } else if (s < outThreshold) {
+                     // Zoom Out (Smaller items -> More columns)
+                     if (isDescending) {
+                         if (currentIndex > 0) nextCols = zoomLevels[currentIndex - 1];
+@@ -236,13 +246,16 @@ export function ZoomGrid<T>({
+ 
+             scale.value = withTiming(targetScale, { duration: 250 }, (finished) => {
+                 if (finished) {
+-                    if (nextCols !== activeColumns) {
+-                        runOnJS(handleZoomFinish)(nextCols);
+-                    } else {
+-                        scale.value = withTiming(1);
+-                    }
++                    runOnJS(handleZoomFinish)(nextCols);
+                 }
+             });
++        })
++        .onFinalize((_event, success) => {
++            if (!success) {
++                scale.value = withTiming(1, { duration: 180 });
++                savedScale.value = 1;
++                runOnJS(setIsPinching)(false);
++            }
+         });
+ 
+     const renderLayer = (cols: number) => {
+@@ -266,18 +279,22 @@ export function ZoomGrid<T>({
+             let opacity = 0;
+             let zIndex = 0;
+ 
++            const activeIndex = zoomLevels.indexOf(currentActiveCols);
++            const descending = zoomLevels[0] > zoomLevels[zoomLevels.length - 1];
++            const inCols = zoomLevels[activeIndex + (descending ? 1 : -1)];
++            const outCols = zoomLevels[activeIndex + (descending ? -1 : 1)];
+             const relativeScale = s * (cols / currentActiveCols);
+ 
+             if (cols === currentActiveCols) {
+                 zIndex = 10;
+                 if (s < 1) {
+-                    opacity = interpolate(s, [1, 0.66], [1, 0], Extrapolation.CLAMP);
++                    opacity = outCols ? interpolate(s, [1, currentActiveCols / outCols], [1, 0], Extrapolation.CLAMP) : 1;
+                 } else {
+                     opacity = 1;
+                 }
+             } else {
+-                const isZoomInTarget = cols < currentActiveCols;
+-                const isZoomOutTarget = cols > currentActiveCols;
++                const isZoomInTarget = cols === inCols;
++                const isZoomOutTarget = cols === outCols;
+ 
+                 if (isZoomInTarget) {
+                     if (s > 1) {
+@@ -339,6 +356,7 @@ export function ZoomGrid<T>({
+                     ref={(r: any) => listRefs.current[cols] = r}
+                     data={layerData}
+                     numColumns={cols}
++                    viewportWidth={width}
+                     targetIndex={config.targetIndex}
+                     invert={invert}
+                     isInteractive={isActive && !isPinching}
+@@ -375,7 +393,9 @@ export function ZoomGrid<T>({
+         <GestureHandlerRootView style={[styles.container, gridStyle]}>
+             {renderHeader && renderHeader({})}
+             <GestureDetector gesture={pinch}>
+-                <View style={[styles.container, gridStyle]}>
++                <View style={[styles.container, gridStyle]} onLayout={({ nativeEvent: { layout } }) => {
++                    if (layout.width > 0 && layout.height > 0) setViewport(previous => previous.width === layout.width && previous.height === layout.height ? previous : { width: layout.width, height: layout.height });
++                }}>
+                     {zoomLevels.map(renderLayer)}
+                 </View>
+             </GestureDetector>
+@@ -390,8 +410,8 @@ const styles = StyleSheet.create({
+         overflow: 'hidden',
+     },
+     layer: {
+-        width: width,
+-        height: height,
++        width: '100%',
++        height: '100%',
+         position: 'absolute',
+         top: 0,
+         left: 0,
+diff --git a/src/ZoomGridList.tsx b/src/ZoomGridList.tsx
+index 07984a0769c6b3a83533d602ee4cbd6d4ed2a0cc..4fe623569a1b3622c7c0c9c284771ab31134bda0 100644
+--- a/src/ZoomGridList.tsx
++++ b/src/ZoomGridList.tsx
+@@ -1,14 +1,14 @@
+ import React, { forwardRef } from 'react';
+-import { View, Dimensions } from 'react-native';
++import { View, useWindowDimensions } from 'react-native';
+ import Animated from 'react-native-reanimated';
+-import { LegendList, LegendListProps } from '@legendapp/list';
++import { LegendList, LegendListProps } from '@legendapp/list/react-native';
+ 
+-const { width } = Dimensions.get('window');
+ 
+ const AnimatedLegendList = Animated.createAnimatedComponent(LegendList) as unknown as React.ComponentType<any>;
+ 
+ export interface ZoomGridListProps<T> extends Omit<LegendListProps<T>, 'renderItem'> {
+     numColumns: number;
++    viewportWidth?: number;
+     isPinching?: React.MutableRefObject<boolean>;
+     targetIndex: number;
+     invert?: boolean;
+@@ -20,6 +20,7 @@ export interface ZoomGridListProps<T> extends Omit<LegendListProps<T>, 'renderIt
+ export const ZoomGridList = forwardRef(({
+     data,
+     numColumns,
++    viewportWidth,
+     isPinching,
+     targetIndex,
+     onScroll,
+@@ -32,6 +33,8 @@ export const ZoomGridList = forwardRef(({
+     extraData,
+     ...rest
+ }: ZoomGridListProps<any>, ref: any) => {
++    const window = useWindowDimensions();
++    const width = viewportWidth ?? window.width;
+     return (
+         <AnimatedLegendList
+             ref={ref}

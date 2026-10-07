@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FlashList } from '@shopify/flash-list';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
@@ -19,10 +18,10 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
 
-function GalleryTile({ asset, status, previewEnabled, onPress }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void }) {
+function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
   return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
-    aspectRatio: asset.width > 0 && asset.height > 0 ? Math.max(0.5, Math.min(2, asset.width / asset.height)) : 1,
+    width: size - 4, height: size - 4,
     backgroundColor: colors.backgroundElement,
   })}>
     {asset.mediaType === 'video' || asset.mediaType === 'image' ? <MediaThumbnail source={{ uri: asset.uri }} cacheKey={['local', asset.id, asset.modifiedAt]} name={asset.filename} local video={asset.mediaType === 'video'} enabled={previewEnabled} />
@@ -46,7 +45,7 @@ function GalleryContent() {
   const allowed = permission?.granted || permission?.accessPrivileges === 'limited';
   const database = useQuery({ queryKey: ['local-database'], queryFn: getLocalDatabase, staleTime: Infinity });
   const gallery = useInfiniteQuery({
-    queryKey: ['device-gallery', generation], enabled: !!allowed,
+    queryKey: ['device-gallery', generation], enabled: !!allowed && database.isSuccess,
     initialPageParam: 0 as GalleryCursor,
     queryFn: async ({ pageParam }) => {
       const page = await loadDeviceMedia(pageParam);
@@ -69,7 +68,7 @@ function GalleryContent() {
   const statuses = useQuery({
     queryKey: ['backup-status', verifiedUrl, account?.id, assets.map((asset) => [asset.id, asset.modifiedAt])],
     queryFn: () => readBackupStatuses(assets, verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
-    enabled: assets.length > 0,
+    enabled: database.isSuccess && assets.length > 0,
   });
   useEffect(() => {
     const refresh = () => { void getPermission(); setGeneration((value) => value + 1); queryClient.removeQueries({ queryKey: ['device-gallery'], type: 'inactive' }); };
@@ -86,7 +85,7 @@ function GalleryContent() {
     } catch (error) { toast.error(extract_message(error)); }
     finally { setRequesting(false); }
   }
-  if (database.isError) return <PageLoader query={database} />;
+  if (database.isError || database.isPending) return <PageLoader query={database} />;
   if (!permission) return <ActivityIndicator color={colors.text} style={tw`flex-1`} />;
   if (!allowed) return <View style={tw`flex-1 justify-center px-6 gap-4 pb-24`}>
     <Text style={tw.style('text-xl font-medium text-center', { color: colors.text })}>Your phone gallery</Text>
@@ -100,10 +99,10 @@ function GalleryContent() {
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     <PageLoader query={gallery}>
-      {() => <GridZoom>{(columns) => <FlashList data={assets} masonry numColumns={columns} optimizeItemArrangement={false}
+      {() => <GridZoom data={assets}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
-        renderItem={({ item, target }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={target === 'Cell'} onPress={open} />}
-        contentContainerStyle={tw.style('px-0.5', { paddingBottom: BottomTabInset + 24 })}
+        renderItem={({ item, size }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled onPress={open} size={size} />}
+        contentInsets={{ bottom: BottomTabInset + 24 }}
         refreshing={gallery.isRefetching && !gallery.isFetchingNextPage}
         onRefresh={() => { void getPermission(); setGeneration((value) => value + 1); void queryClient.invalidateQueries({ queryKey: ['backup-status'] }); }}
         onEndReached={() => { if (gallery.hasNextPage && !gallery.isFetching && !gallery.isFetchNextPageError) void gallery.fetchNextPage(); }}
@@ -113,7 +112,7 @@ function GalleryContent() {
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
           <Button label="Retry" onPress={() => { if (gallery.isFetchNextPageError) void gallery.fetchNextPage(); else void gallery.refetch(); }} />
         </View> : null}
-      />}</GridZoom>}
+      />}
     </PageLoader>
   </View>;
 }

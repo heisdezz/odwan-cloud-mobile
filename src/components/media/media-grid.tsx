@@ -1,5 +1,4 @@
 import { memo, useEffect, useRef } from 'react';
-import { FlashList } from '@shopify/flash-list';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { remoteViewerItem } from '@/helpers/media-viewer';
@@ -9,17 +8,17 @@ import { useServerStore } from '@/stores/server-store';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
 import { extract_message } from '@/helpers/api';
-import { mediaAspectRatio, mediaName, mediaStreamUrl } from '@/helpers/media';
+import { mediaName, mediaStreamUrl } from '@/helpers/media';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import type { MediaItemResponse } from '../../../pocketbase-types';
 
-const MediaTile = memo(function MediaTile({ item, serverUrl, token, previewEnabled, onPress }: { item: MediaItemResponse; serverUrl: string; token: string; previewEnabled: boolean; onPress: (id: string) => void }) {
+const MediaTile = memo(function MediaTile({ item, serverUrl, token, previewEnabled, onPress, size }: { item: MediaItemResponse; serverUrl: string; token: string; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
   const accountId = useServerStore((state) => state.account?.id);
   const video = item.mime_type.startsWith('video/');
   const available = item.upload_status === 'success' && !!item.storage_backend && !!item.storage_bucket && !!item.storage_key;
-  return <Pressable onPress={() => onPress(item.id)} accessibilityRole="button" accessible accessibilityLabel={`${video ? 'Video' : 'Photo'}: ${mediaName(item)}`} style={tw.style('m-0.5 overflow-hidden', { aspectRatio: mediaAspectRatio(item.metadata_json), backgroundColor: colors.backgroundElement })}>
+  return <Pressable onPress={() => onPress(item.id)} accessibilityRole="button" accessible accessibilityLabel={`${video ? 'Video' : 'Photo'}: ${mediaName(item)}`} style={tw.style('m-0.5 overflow-hidden', { width: size - 4, height: size - 4, backgroundColor: colors.backgroundElement })}>
     {available ? <MediaThumbnail source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token } }} video={video}
       cacheKey={['remote', serverUrl, accountId ?? '', item.id, item.file_hash, item.storage_backend, item.storage_bucket, item.storage_key, item.storage_etag ?? '', item.file_size ?? 0]} name={mediaName(item)} enabled={previewEnabled} /> : <View style={tw`flex-1 items-center justify-center px-3 gap-2`}>
       <Text style={tw.style('text-sm text-center font-medium', { color: colors.text })}>{video ? 'Video upload pending' : 'Upload pending'}</Text>
@@ -53,11 +52,10 @@ export function MediaGrid({ items, serverUrl, token, refreshing, onRefresh, onLo
       scope: { serverUrl, accountId: current.account.id, revision: current.revision },
       loadMore: loadViewerPage ? async () => (await loadViewerPage())?.map(remoteViewerItem) : undefined });
   };
-  return <GridZoom>{(columns) => <FlashList
-    masonry numColumns={columns} optimizeItemArrangement={false}
+  return <GridZoom
     data={items} keyExtractor={(item) => item.id}
-    renderItem={({ item, target }) => <MediaTile item={item} serverUrl={serverUrl} token={token} previewEnabled={target === 'Cell'} onPress={open} />}
-    contentContainerStyle={tw.style('px-0.5', { paddingBottom: BottomTabInset + 24 })}
+    renderItem={({ item, size }) => <MediaTile item={item} serverUrl={serverUrl} token={token} previewEnabled onPress={open} size={size} />}
+    contentInsets={{ bottom: BottomTabInset + 24 }}
     refreshing={refreshing} onRefresh={onRefresh}
     onEndReached={onLoadMore} onEndReachedThreshold={0.5}
     ListEmptyComponent={<View style={tw`px-6 py-20 gap-3 items-center`}>
@@ -68,5 +66,5 @@ export function MediaGrid({ items, serverUrl, token, refreshing, onRefresh, onLo
       <Text accessibilityRole="alert" style={tw.style('text-base', { color: colors.text })}>{extract_message(error)}</Text>
       <Button label="Retry" onPress={onLoadMore} />
     </View> : null}
-  />}</GridZoom>;
+  />;
 }

@@ -61,5 +61,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+// Floating bar height plus the gap above the device safe area.
+export const BottomTabInset = 100;
 export const MaxContentWidth = 800;

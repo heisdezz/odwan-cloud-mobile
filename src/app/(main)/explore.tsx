@@ -1,3 +1,4 @@
+import { ComponentPreview } from '@/components/ui/component-preview';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
@@ -28,7 +29,7 @@ export default function TabTwoScreen() {
     },
     web: {
       paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
+      paddingBottom: BottomTabInset + Spacing.four,
     },
   });
 
@@ -38,6 +39,7 @@ export default function TabTwoScreen() {
       contentInset={insets}
       contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
       <ThemedView style={styles.container}>
+        <ComponentPreview />
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="subtitle">Explore</ThemedText>
           <ThemedText style={styles.centerText} themeColor="textSecondary">

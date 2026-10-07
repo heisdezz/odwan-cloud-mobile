@@ -31,6 +31,19 @@ PRAGMA user_version = 1;
 // Used by standalone SQL consumers/tests. Runtime startup configures pragmas before migration.
 export const LOCAL_STORE_SCHEMA = `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; ${LOCAL_STORE_TABLES}`;
 
+// Keep the current gallery separate from versioned backup history. Removing a
+// phone photo from the gallery must never erase evidence of its remote backup.
+export const GALLERY_INDEX_MIGRATION = `
+CREATE TABLE IF NOT EXISTS gallery_index (
+  asset_id TEXT PRIMARY KEY NOT NULL,
+  modified_at REAL NOT NULL,
+  scan_id TEXT NOT NULL,
+  FOREIGN KEY (asset_id, modified_at) REFERENCES local_assets(id, modified_at)
+);
+CREATE INDEX IF NOT EXISTS local_assets_gallery_order ON local_assets(created_at DESC, id DESC);
+PRAGMA user_version = 2;
+`;
+
 export type LocalAsset = {
   id: string; modifiedAt: number; filename: string; uri: string;
   mediaType: string; width: number; height: number; createdAt: number;

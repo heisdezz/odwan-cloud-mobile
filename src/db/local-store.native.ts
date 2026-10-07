@@ -1,7 +1,7 @@
-import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL } from './queries';
+import { UPSERT_LOCAL_ASSET_SQL, UPSERT_INDEXED_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, UPSERT_GALLERY_INDEX_SQL, READ_GALLERY_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
-import { LOCAL_STORE_TABLES, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
+import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
 
 // Keep the connection/queue through Fast Refresh; a second JS module must not race it.
 type DatabaseAccess = ReturnType<typeof createDatabaseAccess<SQLiteDatabase>>;
@@ -11,17 +11,18 @@ const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
   initialize: async (db) => {
     await db.execAsync('PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;');
     const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if ((version?.user_version ?? 0) > 1) throw new Error('Local database is newer than this app. Update the app.');
+    if ((version?.user_version ?? 0) > 2) throw new Error('Local database is newer than this app. Update the app.');
     const journal = await db.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode');
     if (journal?.journal_mode.toLowerCase() !== 'wal') await db.execAsync('PRAGMA journal_mode = WAL;');
     if ((version?.user_version ?? 0) < 1) await db.withTransactionAsync(() => db.execAsync(LOCAL_STORE_TABLES));
+    if ((version?.user_version ?? 0) < 2) await db.withTransactionAsync(() => db.execAsync(GALLERY_INDEX_MIGRATION));
   },
   close: (db) => db.closeAsync(),
 });
 export function getLocalDatabase() { return access.run(async (db) => db); }
 
-async function writeAssets(db: SQLiteDatabase, assets: LocalAsset[]) {
-  const statement = await db.prepareAsync(UPSERT_LOCAL_ASSET_SQL);
+async function writeAssets(db: SQLiteDatabase, assets: LocalAsset[], sql = UPSERT_LOCAL_ASSET_SQL) {
+  const statement = await db.prepareAsync(sql);
   try {
     const now = Date.now();
     for (const asset of assets) await statement.executeAsync(
@@ -31,6 +32,31 @@ async function writeAssets(db: SQLiteDatabase, assets: LocalAsset[]) {
 export function rememberAssets(assets: LocalAsset[]) {
   if (!assets.length) return Promise.resolve();
   return access.run((db) => db.withTransactionAsync(() => writeAssets(db, assets)));
+}
+
+/** Short queued transactions let gallery reads run between scan batches. */
+export function indexGalleryPage(assets: LocalAsset[], scanId: string) {
+  return access.run((db) => db.withTransactionAsync(async () => {
+    await writeAssets(db, assets, UPSERT_INDEXED_ASSET_SQL);
+    const statement = await db.prepareAsync(UPSERT_GALLERY_INDEX_SQL);
+    try { for (const asset of assets) await statement.executeAsync(asset.id, asset.modifiedAt, scanId); }
+    finally { await statement.finalizeAsync(); }
+  }));
+}
+export function finishGalleryScan(scanId: string, signal?: AbortSignal) {
+  return access.run((db) => {
+    if (signal?.aborted) throw new Error('Gallery sync cancelled.');
+    return db.runAsync(FINISH_GALLERY_SCAN_SQL, scanId);
+  });
+}
+export function clearGalleryIndex() {
+  return access.run((db) => db.runAsync('DELETE FROM gallery_index'));
+}
+export function readGalleryPage(offset = 0) {
+  return access.run(async (db) => {
+    const rows = await db.getAllAsync<LocalAsset>(READ_GALLERY_SQL, 121, offset);
+    return { assets: rows.slice(0, 120), next: rows.length > 120 ? offset + 120 : undefined };
+  });
 }
 
 export async function readBackupStatuses(assets: LocalAsset[], scope: BackupScope | null) {

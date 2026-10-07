@@ -104,8 +104,18 @@ These are reusable components and comparison examples; they do not add uploads o
 
 ## Grid zoom and video previews
 
-Photos and Gallery both support 2–6 columns using pinch gestures. Pinch inward to show more columns; spread outward for larger tiles. Density changes once at the end of a pinch, so scrolling does not repeatedly trigger masonry layout updates. FlashList keeps its mounted list and visible-content positioning as columns change.
+Photos and Gallery support 2–6 columns using `react-native-zoom-grid`, which uses Legend List internally. Pinch inward to show more columns; spread outward for larger tiles. The saved Bun patch restores scrolling after cancelled gestures, uses the actual viewport, and supplies exact square tile sizes. Rows recycle with preview errors scoped to each media item. App styling uses `twrnc`.
 
-Native video previews use the existing `expo-video` dependency. Only cell renders request previews; measurement renders do not decode videos. At most two decoders run concurrently. Leaving a cell cancels queued or active work, and each request has a 20-second deadline. Frames are capped at 320×320 and cached in React Query for reuse, with unused queries collected after 30 seconds. Sources do not play or use persistent video caching. Failed previews expose a retry action.
+Photo and video thumbnails are generated on demand, bounded to 256×256 without stretching, compressed as JPEGs, and stored in the app's documents directory. Subsequent mounts and app sessions reuse these files. At most two generation jobs run concurrently; offscreen queued jobs can be cancelled, while started jobs finish publishing their output. Video frames use `expo-video` with a 20-second deadline. Unsupported codecs or inaccessible files expose a retry action.
 
-Local preview keys include asset ID and modification time. Server keys include account, connection revision, file hash, and storage mapping; authorization is sent in request headers. Browsers retain video placeholders because the native frame-generation API is unavailable there. Unsupported codecs or inaccessible cloud files can still fail; the backend contract remains unchanged.
+Local preview keys include asset ID and modification time. Server disk keys include server, account, file hash, and storage mapping; connection revision separates in-memory queries. Authorization is sent in request headers. Web retains original photo previews and video placeholders.
+
+## Local gallery index
+
+The root `GallerySyncProvider` checks existing media permissions at app launch and starts syncing the accessible phone library into `odwan-local.db`. Gallery and its viewer page through SQLite rather than querying MediaStore during scrolling. The first scan progressively makes media available; later launches read the saved index while another scan reconciles it. Pull to refresh, app resume, and debounced library notifications trigger another scan.
+
+Scanning runs asynchronously while the app is open, in short queued transactions with pauses between batches. It is not an OS background service and does not promise work after the app is terminated. Metadata is scanned in full for reconciliation, but unchanged metadata is not rewritten and thumbnails are generated only when requested by cells.
+
+Schema version 2 adds `gallery_index`, which selects each asset's current version. Versioned `local_assets` and `backup_status` remain intact when phone media is deleted or edited. Only a successful complete scan removes unseen index entries; failed or cancelled scans retain cached entries for retry. Migration preserves existing backup records and requires no database reset.
+
+Permission is checked before showing cached media. Limited-access selections are reindexed before exposing an old selection; they do not use the immediate full-library cache path. Android Expo Go still requires a development build for gallery access. Reload the app after installing the updated JavaScript so the migration runs.

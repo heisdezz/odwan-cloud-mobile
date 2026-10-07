@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { MediaThumbnail } from '@/components/media/media-thumbnail';
-import { addListener, presentPermissionsPicker, usePermissions, loadDeviceMedia, type GalleryCursor } from '@/lib/device-media.native';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
+import { presentPermissionsPicker } from '@/lib/device-media.native';
+import { useGallerySync } from '@/providers/gallery-sync-provider.native';
+import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 import PageLoader from '@/components/layouts/PageLoader';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
-import { getLocalDatabase, readBackupStatuses, rememberAssets } from '@/db/local-store.native';
+import { readGalleryPage, readBackupStatuses } from '@/db/local-store.native';
 import { backupLabel, type BackupStatus, type LocalAsset } from '@/db/schema';
 import { extract_message } from '@/helpers/api';
 import { useTheme } from '@/hooks/use-theme';
@@ -37,22 +38,15 @@ function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: 
 
 function GalleryContent() {
   const colors = useTheme();
-  const queryClient = useQueryClient();
-  const [permission, requestPermission, getPermission] = usePermissions({ granularPermissions: ['photo', 'video'] });
+  const { permission, requestPermission, refresh, allowed, cacheReadable, database, sync } = useGallerySync();
   const [requesting, setRequesting] = useState(false);
-  const [generation, setGeneration] = useState(0);
   const { verifiedUrl, account } = useServerStore();
-  const allowed = permission?.granted || permission?.accessPrivileges === 'limited';
-  const database = useQuery({ queryKey: ['local-database'], queryFn: getLocalDatabase, staleTime: Infinity });
   const gallery = useInfiniteQuery({
-    queryKey: ['device-gallery', generation], enabled: !!allowed && database.isSuccess,
-    initialPageParam: 0 as GalleryCursor,
-    queryFn: async ({ pageParam }) => {
-      const page = await loadDeviceMedia(pageParam);
-      await rememberAssets(page.assets);
-      return page;
-    },
+    queryKey: ['device-gallery'], enabled: cacheReadable && database.isSuccess,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => readGalleryPage(pageParam),
     getNextPageParam: (page) => page.next,
+    networkMode: 'always', staleTime: Infinity,
   });
   const assets = useMemo(() => [...new Map((gallery.data?.pages.flatMap((page) => page.assets) ?? []).map((asset) => [asset.id, asset])).values()], [gallery.data]);
   const viewer = useMediaViewer();
@@ -70,18 +64,11 @@ function GalleryContent() {
     queryFn: () => readBackupStatuses(assets, verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
     enabled: database.isSuccess && assets.length > 0,
   });
-  useEffect(() => {
-    const refresh = () => { void getPermission(); setGeneration((value) => value + 1); queryClient.removeQueries({ queryKey: ['device-gallery'], type: 'inactive' }); };
-    const app = AppState.addEventListener('change', (state) => { if (state === 'active') refresh(); });
-    let timer: ReturnType<typeof setTimeout>;
-    const library = allowed ? addListener(() => { clearTimeout(timer); timer = setTimeout(refresh, 500); }) : null;
-    return () => { app.remove(); library?.remove(); clearTimeout(timer); };
-  }, [allowed, getPermission, queryClient]);
   async function grantAccess() {
     setRequesting(true);
     try {
       if (permission && !permission.canAskAgain) await Linking.openSettings();
-      else await requestPermission();
+      else { await requestPermission(); await refresh(); }
     } catch (error) { toast.error(extract_message(error)); }
     finally { setRequesting(false); }
   }
@@ -93,27 +80,36 @@ function GalleryContent() {
     <Button label={permission.canAskAgain ? 'Allow gallery access' : 'Open app settings'} loading={requesting} onPress={() => { void grantAccess(); }} />
   </View>;
   return <View style={tw`flex-1`}>
+    {!cacheReadable ? <ActivityIndicator color={colors.text} style={tw`py-4`} /> : null}
+    {sync.running && <View style={tw`flex-row items-center gap-2 px-6 py-2`}>
+      <ActivityIndicator size="small" color={colors.textSecondary} />
+      <Text style={tw.style('text-sm', { color: colors.textSecondary })}>Updating phone gallery…</Text>
+    </View>}
+    {sync.error && <View style={tw`px-6 py-2 gap-2`}>
+      <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{sync.error}</Text>
+      <Button variant="text" label="Retry gallery sync" onPress={() => { void refresh().catch((error) => toast.error(extract_message(error))); }} />
+    </View>}
     {permission.accessPrivileges === 'limited' && <View style={tw`px-6 pb-3 gap-2`}>
       <Text style={tw.style('text-sm', { color: colors.textSecondary })}>Showing only photos and videos you allowed.</Text>
-      <Button variant="text" label="Manage access" onPress={() => { void presentPermissionsPicker().then(() => getPermission()).then(() => setGeneration((value) => value + 1)).catch((error) => toast.error(extract_message(error))); }} />
+      <Button variant="text" label="Manage access" onPress={() => { void presentPermissionsPicker().then(() => refresh()).catch((error) => toast.error(extract_message(error))); }} />
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
-    <PageLoader query={gallery}>
+    {cacheReadable && <PageLoader query={gallery}>
       {() => <GridZoom data={assets}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
         renderItem={({ item, size }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled onPress={open} size={size} />}
         contentInsets={{ bottom: BottomTabInset + 24 }}
-        refreshing={gallery.isRefetching && !gallery.isFetchingNextPage}
-        onRefresh={() => { void getPermission(); setGeneration((value) => value + 1); void queryClient.invalidateQueries({ queryKey: ['backup-status'] }); }}
+        refreshing={sync.running}
+        onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }}
         onEndReached={() => { if (gallery.hasNextPage && !gallery.isFetching && !gallery.isFetchNextPageError) void gallery.fetchNextPage(); }}
         onEndReachedThreshold={0.5}
-        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>No photos or videos are accessible.</Text>}
+        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : 'No photos or videos are accessible.'}</Text>}
         ListFooterComponent={gallery.isFetchingNextPage ? <ActivityIndicator color={colors.text} style={tw`py-6`} /> : gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
           <Button label="Retry" onPress={() => { if (gallery.isFetchNextPageError) void gallery.fetchNextPage(); else void gallery.refetch(); }} />
         </View> : null}
       />}
-    </PageLoader>
+    </PageLoader>}
   </View>;
 }
 

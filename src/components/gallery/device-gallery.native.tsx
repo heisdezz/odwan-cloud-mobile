@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FlashList, useRecyclingState } from '@shopify/flash-list';
-import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
-import { VideoThumbnail } from '@/components/media/video-thumbnail';
+import { MediaThumbnail } from '@/components/media/media-thumbnail';
 import { addListener, presentPermissionsPicker, usePermissions, loadDeviceMedia, type GalleryCursor } from '@/lib/device-media.native';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
@@ -22,12 +21,11 @@ import { useServerStore } from '@/stores/server-store';
 
 function GalleryTile({ asset, status, previewEnabled, onPress }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void }) {
   const colors = useTheme();
-  const [failed, setFailed] = useRecyclingState(false, [asset.id, asset.modifiedAt]);
   return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     aspectRatio: asset.width > 0 && asset.height > 0 ? Math.max(0.5, Math.min(2, asset.width / asset.height)) : 1,
     backgroundColor: colors.backgroundElement,
   })}>
-    {asset.mediaType === 'video' ? <VideoThumbnail source={{ uri: asset.uri, useCaching: false }} cacheKey={['local', asset.id, asset.modifiedAt]} name={asset.filename} local enabled={previewEnabled} /> : !failed && asset.mediaType === 'image' ? <Image source={asset.uri} recyclingKey={`${asset.id}:${asset.modifiedAt}`} contentFit="cover" style={tw`w-full h-full`} cachePolicy="memory" onError={() => setFailed(true)} />
+    {asset.mediaType === 'video' || asset.mediaType === 'image' ? <MediaThumbnail source={{ uri: asset.uri }} cacheKey={['local', asset.id, asset.modifiedAt]} name={asset.filename} local video={asset.mediaType === 'video'} enabled={previewEnabled} />
       : <View style={tw`flex-1 justify-center items-center px-3 gap-2`}>
         <Text style={tw.style('text-sm font-medium', { color: colors.text })}>{asset.mediaType === 'video' ? 'Video' : 'Preview unavailable'}</Text>
         <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>{asset.filename}</Text>

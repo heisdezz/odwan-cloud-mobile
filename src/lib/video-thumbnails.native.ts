@@ -1,9 +1,9 @@
-import { createVideoPlayer, type VideoSource } from 'expo-video';
+import { createVideoPlayer, type VideoSource, type VideoThumbnail } from 'expo-video';
 import { createTaskQueue } from './task-queue';
 
 const enqueue = createTaskQueue(2);
 
-export function generateVideoThumbnail(source: VideoSource, signal: AbortSignal) {
+export function generateVideoThumbnail<T>(source: VideoSource, signal: AbortSignal, consume: (frame: VideoThumbnail) => Promise<T>) {
   return enqueue(async () => {
     if (signal.aborted) throw new Error('Thumbnail request cancelled.');
     const player = createVideoPlayer(null);
@@ -21,9 +21,10 @@ export function generateVideoThumbnail(source: VideoSource, signal: AbortSignal)
       const work = (async () => {
         await player.replaceAsync(source);
         if (ended || signal.aborted) throw new Error('Thumbnail request cancelled.');
-        const [thumbnail] = await player.generateThumbnailsAsync(0, { maxWidth: 320, maxHeight: 320 });
+        const [thumbnail] = await player.generateThumbnailsAsync(0, { maxWidth: 256, maxHeight: 256 });
         if (!thumbnail) throw new Error('No video preview could be generated.');
-        return thumbnail;
+        try { return await consume(thumbnail); }
+        finally { thumbnail.release(); }
       })();
       return await Promise.race([work, interrupted]);
     } finally {

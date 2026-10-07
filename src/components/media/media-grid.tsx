@@ -1,11 +1,10 @@
 import { memo, useEffect, useRef } from 'react';
-import { FlashList, useRecyclingState } from '@shopify/flash-list';
-import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { remoteViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from './grid-zoom';
-import { VideoThumbnail } from './video-thumbnail';
+import { MediaThumbnail } from './media-thumbnail';
 import { useServerStore } from '@/stores/server-store';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
@@ -17,20 +16,13 @@ import type { MediaItemResponse } from '../../../pocketbase-types';
 
 const MediaTile = memo(function MediaTile({ item, serverUrl, token, previewEnabled, onPress }: { item: MediaItemResponse; serverUrl: string; token: string; previewEnabled: boolean; onPress: (id: string) => void }) {
   const colors = useTheme();
-  const [failed, setFailed] = useRecyclingState(false, [item.id, serverUrl, token]);
-  const revision = useServerStore((state) => state.revision);
   const accountId = useServerStore((state) => state.account?.id);
   const video = item.mime_type.startsWith('video/');
   const available = item.upload_status === 'success' && !!item.storage_backend && !!item.storage_bucket && !!item.storage_key;
   return <Pressable onPress={() => onPress(item.id)} accessibilityRole="button" accessible accessibilityLabel={`${video ? 'Video' : 'Photo'}: ${mediaName(item)}`} style={tw.style('m-0.5 overflow-hidden', { aspectRatio: mediaAspectRatio(item.metadata_json), backgroundColor: colors.backgroundElement })}>
-    {available && video ? <VideoThumbnail source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token }, useCaching: false }}
-      cacheKey={['remote', serverUrl, accountId ?? '', revision, item.id, item.file_hash, item.storage_backend, item.storage_bucket, item.storage_key]} name={mediaName(item)} enabled={previewEnabled} /> : available && !video && !failed ? <Image
-      source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token } }}
-      recyclingKey={`${serverUrl}:${item.id}:${item.file_hash}`}
-      style={tw`w-full h-full`} contentFit="cover" cachePolicy="memory" transition={0}
-      onError={() => setFailed(true)}
-    /> : <View style={tw`flex-1 items-center justify-center px-3 gap-2`}>
-      <Text style={tw.style('text-sm text-center font-medium', { color: colors.text })}>{video ? 'Video' : failed ? 'Image unavailable' : 'Upload pending'}</Text>
+    {available ? <MediaThumbnail source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token } }} video={video}
+      cacheKey={['remote', serverUrl, accountId ?? '', item.id, item.file_hash, item.storage_backend, item.storage_bucket, item.storage_key, item.storage_etag ?? '', item.file_size ?? 0]} name={mediaName(item)} enabled={previewEnabled} /> : <View style={tw`flex-1 items-center justify-center px-3 gap-2`}>
+      <Text style={tw.style('text-sm text-center font-medium', { color: colors.text })}>{video ? 'Video upload pending' : 'Upload pending'}</Text>
       <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>{mediaName(item)}</Text>
     </View>}
   </Pressable>;

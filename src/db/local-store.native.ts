@@ -1,3 +1,4 @@
+import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL } from './queries';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { LOCAL_STORE_TABLES, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
@@ -20,11 +21,7 @@ const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
 export function getLocalDatabase() { return access.run(async (db) => db); }
 
 async function writeAssets(db: SQLiteDatabase, assets: LocalAsset[]) {
-  const statement = await db.prepareAsync(`INSERT INTO local_assets
-    (id, modified_at, filename, uri, media_type, width, height, created_at, last_seen_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id, modified_at) DO UPDATE SET uri=excluded.uri, filename=excluded.filename,
-    width=excluded.width, height=excluded.height, last_seen_at=excluded.last_seen_at`);
+  const statement = await db.prepareAsync(UPSERT_LOCAL_ASSET_SQL);
   try {
     const now = Date.now();
     for (const asset of assets) await statement.executeAsync(
@@ -58,9 +55,7 @@ export async function recordBackupStatus(asset: LocalAsset, scope: BackupScope, 
   if (status === 'backed_up' && (!confirmation?.remoteId || !confirmation.fileHash)) throw new Error('A confirmed remote record and file hash are required.');
   await access.run((db) => db.withTransactionAsync(async () => {
     await writeAssets(db, [asset]);
-    await db.runAsync(`INSERT INTO backup_status (asset_id, modified_at, server_url, account_id, status, remote_id, file_hash, error, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(asset_id, modified_at, server_url, account_id)
-      DO UPDATE SET status=excluded.status, remote_id=excluded.remote_id, file_hash=excluded.file_hash, error=excluded.error, updated_at=excluded.updated_at`,
+    await db.runAsync(UPSERT_BACKUP_STATUS_SQL,
       asset.id, asset.modifiedAt, scope.serverUrl, scope.accountId, status, confirmation?.remoteId ?? null, confirmation?.fileHash ?? null, error ?? null, Date.now());
   }));
 }

@@ -79,6 +79,7 @@ function useGallerySyncState() {
           if (limited) {
             await clearGalleryIndex();
             client.removeQueries({ queryKey: ['device-gallery'] });
+            client.removeQueries({ queryKey: ['device-albums'] });
             if (!signal.aborted) setLimitedReady(true);
           }
           await scanGallery<GalleryCursor>({ initialCursor: 0, signal, load: loadDeviceMedia,
@@ -110,6 +111,7 @@ function useGallerySyncState() {
         if (signal.aborted) return;
         await client.invalidateQueries({ queryKey: ['device-gallery'] });
         await client.invalidateQueries({ queryKey: ['backup-status'] });
+        await client.invalidateQueries({ queryKey: ['device-albums'] });
         if (signal.aborted) return;
         if (limited) setLimitedReady(true);
         setSync({ running: false, count, error: '' });

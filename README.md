@@ -53,9 +53,13 @@ const { toggleTheme, setTheme } = useAppTheme();
 
 Use `twrnc` for React Native layout, spacing, typography, and responsive utilities. Use `useTheme()` for semantic colors rather than hardcoded Tailwind colors. The root provider initializes device context and synchronizes `dark:` utilities with the selected appearance. Native Compose internals use Expo UI modifiers, not React Native styles; the shared controls' `style` prop styles their outer React Native host.
 
-Material colors follow the wallpaper on Android 12+ and use Material 3 defaults on older Android versions. Navigation, existing themed components, and the new controls share the palette. iOS/web retain the existing surface colors with Material fallback accents. The Explore screen includes interactive examples.
+Material colors follow the wallpaper on Android 12+ and use Material 3 defaults on older Android versions. Navigation, existing themed components, and the new controls share the palette. iOS/web retain the existing surface colors with Material fallback accents.
 
 Theme selection lasts for the current session. `react-native-theme-switch-animation` animates explicit theme changes in a native build and respects reduced motion. Web and Expo Go switch directly. Build a new APK with the preview profile after installing the native package; its animation and compatibility with React Native 0.86 still require device verification.
+
+## Albums
+
+Explore has a Device / Server album switcher. `LocalAlbums` lists device albums and counts from MediaLibrary, fetching covers on demand and sharing the gallery's thumbnail cache and permissions. Opening a device album loads its complete photo/video metadata in idle-paced batches before showing the pinch grid; the viewer can swipe through that album. Library changes invalidate local album queries; app focus alone does not reload them. `RemoteAlbums` keeps the authenticated, paginated server list. Web shows the server source by default and explains that device albums require the mobile app.
 
 ## Animated tab bar
 

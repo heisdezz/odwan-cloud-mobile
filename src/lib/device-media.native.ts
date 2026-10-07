@@ -53,16 +53,19 @@ export function mediaChangeIds(event: Parameters<Parameters<typeof addListener>[
     upsert: [...ids(event.insertedAssets), ...ids(event.updatedAssets)], deleted: ids(event.deletedAssets) };
 }
 
-export async function loadDeviceMedia(cursor: GalleryCursor): Promise<{ assets: LocalAsset[]; next?: GalleryCursor }> {
+export async function loadDeviceMedia(cursor: GalleryCursor, options: { albumId?: string; pageSize?: number } = {}): Promise<{ assets: LocalAsset[]; next?: GalleryCursor }> {
+  const pageSize = options.pageSize ?? 60;
   if (modern) {
-    const metadata = await new modern.Query().within(modern.AssetField.MEDIA_TYPE, [modern.MediaType.IMAGE, modern.MediaType.VIDEO])
-      .orderBy({ key: modern.AssetField.CREATION_TIME, ascending: false }).offset(Number(cursor)).limit(60).exeForMetadata();
+    const query = new modern.Query();
+    if (options.albumId) query.album(new modern.Album(options.albumId));
+    const metadata = await query.within(modern.AssetField.MEDIA_TYPE, [modern.MediaType.IMAGE, modern.MediaType.VIDEO])
+      .orderBy({ key: modern.AssetField.CREATION_TIME, ascending: false }).offset(Number(cursor)).limit(pageSize).exeForMetadata();
     return {
       assets: metadata.map(metadataAsset),
-      next: metadata.length === 60 ? Number(cursor) + 60 : undefined,
+      next: metadata.length === pageSize ? Number(cursor) + pageSize : undefined,
     };
   }
-  const page = await legacy!.getAssetsAsync({ first: 60, after: typeof cursor === 'string' ? cursor : undefined,
+  const page = await legacy!.getAssetsAsync({ album: options.albumId, first: pageSize, after: typeof cursor === 'string' ? cursor : undefined,
     mediaType: ['photo', 'video'], sortBy: [['creationTime', false]], resolveWithFullInfo: true });
   return {
     assets: page.assets.map((asset) => ({

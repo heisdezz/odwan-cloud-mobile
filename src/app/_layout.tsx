@@ -32,6 +32,7 @@ function ThemedNavigation() {
       <AnimatedSplashOverlay />
       <Stack initialRouteName="(main)" screenOptions={{ headerShown: true }}>
         <Stack.Screen name="(main)" options={{ headerShown: false }} />
+        <Stack.Screen name="device-album/[id]" options={{ title: 'Device album' }} />
         <Stack.Screen name="album/[id]/index" options={{ title: 'Album' }} />
         <Stack.Screen name="media/[mediaId]/index" options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade', contentStyle: tw`bg-black` }} />
         <Stack.Screen name="album/[id]/[mediaId]/index" options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade', contentStyle: tw`bg-black` }} />

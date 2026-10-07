@@ -1,4 +1,4 @@
-import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
+import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, READ_FULL_GALLERY_SQL, READ_GALLERY_BACKUPS_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
 import { writeGalleryBatch } from './gallery-index';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
@@ -52,6 +52,17 @@ export function readGalleryPage(offset = 0) {
   return access.run(async (db) => {
     const rows = await db.getAllAsync<LocalAsset>(READ_GALLERY_SQL, 121, offset);
     return { assets: rows.slice(0, 120), next: rows.length > 120 ? offset + 120 : undefined };
+  });
+}
+
+export function readFullGallery() {
+  return access.run((db) => db.getAllAsync<LocalAsset>(READ_FULL_GALLERY_SQL));
+}
+export async function readGalleryBackupStatuses(scope: BackupScope | null) {
+  if (!scope) return {} as Record<string, BackupStatus>;
+  return access.run(async (db) => {
+    const rows = await db.getAllAsync<{ asset_id: string; status: BackupStatus }>(READ_GALLERY_BACKUPS_SQL, scope.serverUrl, scope.accountId);
+    return Object.fromEntries(rows.map((row) => [row.asset_id, row.status]));
   });
 }
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
@@ -12,12 +12,14 @@ import { toast } from 'sonner-native';
 import PageLoader from '@/components/layouts/PageLoader';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
-import { readGalleryPage, readBackupStatuses } from '@/db/local-store.native';
+import { readFullGallery, readGalleryBackupStatuses } from '@/db/local-store.native';
 import { backupLabel, type BackupStatus, type LocalAsset } from '@/db/schema';
 import { extract_message } from '@/helpers/api';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
+
+const EMPTY_ASSETS: LocalAsset[] = [];
 
 function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
@@ -41,28 +43,19 @@ function GalleryContent() {
   const { permission, requestPermission, refresh, allowed, cacheReadable, database, sync } = useGallerySync();
   const [requesting, setRequesting] = useState(false);
   const { verifiedUrl, account } = useServerStore();
-  const gallery = useInfiniteQuery({
-    queryKey: ['device-gallery'], enabled: cacheReadable && database.isSuccess,
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) => readGalleryPage(pageParam),
-    getNextPageParam: (page) => page.next,
-    networkMode: 'always', staleTime: Infinity,
+  const gallery = useQuery({
+    queryKey: ['device-gallery', 'all'], enabled: cacheReadable && database.isSuccess,
+    queryFn: readFullGallery, networkMode: 'always', staleTime: Infinity,
   });
-  const assets = useMemo(() => [...new Map((gallery.data?.pages.flatMap((page) => page.assets) ?? []).map((asset) => [asset.id, asset])).values()], [gallery.data]);
+  const assets = gallery.data ?? EMPTY_ASSETS;
   const viewer = useMediaViewer();
   const assetsRef = useRef(assets);
   useEffect(() => { assetsRef.current = assets; }, [assets]);
-  const open = (id: string) => viewer.open({ items: assetsRef.current.map(localViewerItem), selectedId: id,
-    loadMore: async () => {
-      if (!gallery.hasNextPage) return undefined;
-      const result = await gallery.fetchNextPage();
-      if (result.isError) throw result.error;
-      return result.data?.pages.flatMap((page) => page.assets).map(localViewerItem);
-    } });
+  const open = (id: string) => viewer.open({ items: assetsRef.current.map(localViewerItem), selectedId: id });
   const statuses = useQuery({
-    queryKey: ['backup-status', verifiedUrl, account?.id, assets.map((asset) => [asset.id, asset.modifiedAt])],
-    queryFn: () => readBackupStatuses(assets, verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
-    enabled: database.isSuccess && assets.length > 0,
+    queryKey: ['backup-status', 'gallery', verifiedUrl, account?.id, gallery.dataUpdatedAt],
+    queryFn: () => readGalleryBackupStatuses(verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
+    enabled: cacheReadable && database.isSuccess && assets.length > 0,
   });
   async function grantAccess() {
     setRequesting(true);
@@ -97,16 +90,14 @@ function GalleryContent() {
     {cacheReadable && <PageLoader query={gallery}>
       {() => <GridZoom data={assets}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
-        renderItem={({ item, size }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled onPress={open} size={size} />}
+        renderItem={({ item, size, previewEnabled }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} />}
         contentInsets={{ bottom: BottomTabInset + 24 }}
         refreshing={sync.running}
         onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }}
-        onEndReached={() => { if (gallery.hasNextPage && !gallery.isFetching && !gallery.isFetchNextPageError) void gallery.fetchNextPage(); }}
-        onEndReachedThreshold={0.5}
         ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : 'No photos or videos are accessible.'}</Text>}
-        ListFooterComponent={gallery.isFetchingNextPage ? <ActivityIndicator color={colors.text} style={tw`py-6`} /> : gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
+        ListFooterComponent={gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
-          <Button label="Retry" onPress={() => { if (gallery.isFetchNextPageError) void gallery.fetchNextPage(); else void gallery.refetch(); }} />
+          <Button label="Retry" onPress={() => { void gallery.refetch(); }} />
         </View> : null}
       />}
     </PageLoader>}

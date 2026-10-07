@@ -1,39 +1,35 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { gridPinchTarget, gridWindow } from '../src/helpers/grid-zoom';
 
-// Execute the installed package's gesture callbacks without a native UI runtime.
-// This checks our saved patch, including the cancellation bug that can disable scrolling.
-function gestureFor(activeColumns) {
-  const source = readFileSync(new URL('../node_modules/react-native-zoom-grid/src/ZoomGrid.tsx', import.meta.url), 'utf8');
-  const start = source.indexOf('const pinch = Gesture.Pinch()');
-  const end = source.indexOf('const renderLayer', start);
-  const callbacks = {};
-  const chain = {};
-  for (const name of ['onStart', 'onUpdate', 'onEnd', 'onFinalize']) chain[name] = (callback) => { callbacks[name] = callback; return chain; };
-  const scale = { value: 1 }, savedScale = { value: 1 };
-  let pinching = false, committed = activeColumns;
-  const evaluate = new Function('Gesture', 'runOnJS', 'setIsPinching', 'scale', 'savedScale', 'focalX', 'focalY', 'prepareZoom', 'activeColumns', 'zoomLevels', 'withTiming', 'handleZoomFinish', source.slice(start, end));
-  evaluate({ Pinch: () => chain }, (fn) => fn, (value) => { pinching = value; }, scale, savedScale, { value: 0 }, { value: 0 }, () => {}, activeColumns, [6, 5, 4, 3, 2], (value, options, done) => { done?.(true); return value; }, (value) => { committed = value; pinching = false; });
-  return { callbacks, scale, pinching: () => pinching, committed: () => committed };
-}
-test('cancelled pinch restores scrolling without changing grid density', () => {
-  const gesture = gestureFor(3);
-  gesture.callbacks.onStart({ focalX: 100, focalY: 100 });
-  gesture.callbacks.onUpdate({ scale: 1.2 });
-  expect(gesture.pinching()).toBe(true);
-  gesture.callbacks.onFinalize({}, false);
-  expect(gesture.pinching()).toBe(false);
-  expect(gesture.scale.value).toBe(1);
-  expect(gesture.committed()).toBe(3);
+const layout = { count: 1000, columns: 3, width: 360, height: 640, offset: 1200, x: 150, y: 240, top: 0, bottom: 100 };
+test('pinch preserves the focal asset at the new density and clamps two to six columns', () => {
+  const result = gridPinchTarget({ ...layout, scale: 1.5 });
+  expect(result.columns).toBe(2);
+  expect(result.index).toBe(37);
+  expect(Math.floor((result.offset + layout.y) / (layout.width / result.columns))).toBe(Math.floor(result.index / result.columns));
+  expect(gridPinchTarget({ ...layout, scale: 0.1 }).columns).toBe(6);
+  expect(gridPinchTarget({ ...layout, scale: 10 }).columns).toBe(2);
+  expect(gridPinchTarget({ ...layout, scale: 1.01 }).columns).toBe(3);
 });
-test('zoom transitions snap to the neighboring level and stay within two to six columns', () => {
-  for (const [initial, scale, expected] of [[3, 2, 2], [3, 0.5, 4], [2, 2, 2], [6, 0.1, 6], [3, 1.01, 3]]) {
-    const gesture = gestureFor(initial);
-    gesture.callbacks.onStart({ focalX: 100, focalY: 100 });
-    gesture.callbacks.onUpdate({ scale });
-    gesture.callbacks.onEnd();
-    gesture.callbacks.onFinalize({}, true);
-    expect(gesture.committed()).toBe(expected);
-    expect(gesture.pinching()).toBe(false);
-  }
+test('focal alignment never scrolls past either end of a short gallery', () => {
+  expect(gridPinchTarget({ ...layout, count: 2, offset: 0, scale: 0.5 }).offset).toBe(0);
+  const result = gridPinchTarget({ ...layout, count: 40, offset: 9999, scale: 0.5 });
+  expect(result.offset).toBeLessThanOrEqual(Math.ceil(40 / 6) * 60 + 100 - 640 > 0 ? Math.ceil(40 / 6) * 60 + 100 - 640 : 0);
+});
+test('thumbnail window includes just the viewport and two buffer rows', () => {
+  expect(gridWindow(1000, 3, 360, 600, 1200)).toEqual({ first: 24, last: 50 });
+  expect(gridWindow(1000, 6, 360, 600, 0)).toEqual({ first: 0, last: 71 });
+  expect(gridWindow(0, 3, 360, 600, 0)).toEqual({ first: 0, last: -1 });
+  expect(gridWindow(5, 3, 360, 600, 0)).toEqual({ first: 0, last: 4 });
+});
+test('a cancelled pinch always releases its preview and busy state', () => {
+  const source = readFileSync(new URL('../src/components/media/grid-zoom.tsx', import.meta.url), 'utf8');
+  const body = source.match(/\.onFinalize\(\(_event, success\) => \{([\s\S]*?)\n    \}\)/)[1];
+  const shared = (value) => ({ value, set(next) { this.value = next; } });
+  const pinching = shared(true), scale = shared(2), busy = shared(true);
+  new Function('pinching', 'scale', 'busy', 'withTiming', 'success', body)(pinching, scale, busy, (value) => value, false);
+  expect(pinching.value).toBe(false);
+  expect(scale.value).toBe(1);
+  expect(busy.value).toBe(false);
 });

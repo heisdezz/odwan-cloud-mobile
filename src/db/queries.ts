@@ -26,6 +26,10 @@ export const READ_GALLERY_SQL = `SELECT a.id, a.modified_at AS modifiedAt, a.fil
   FROM local_assets a JOIN gallery_index g ON a.id=g.asset_id AND a.modified_at=g.modified_at
   ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
 export const FINISH_GALLERY_SCAN_SQL = 'DELETE FROM gallery_index WHERE scan_id != ?';
+export const READ_FULL_GALLERY_SQL = READ_GALLERY_SQL.replace(' LIMIT ? OFFSET ?', '');
+export const READ_GALLERY_BACKUPS_SQL = `SELECT s.asset_id, s.status FROM backup_status s
+  JOIN gallery_index g ON g.asset_id=s.asset_id AND g.modified_at=s.modified_at
+  WHERE s.server_url=? AND s.account_id=?`;
 
 // Decode one bound JSON page on SQLite's native I/O queue, rather than crossing
 // back into JS for two individual writes per asset. Keep the same upsert rules.

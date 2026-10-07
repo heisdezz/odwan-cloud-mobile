@@ -35,3 +35,14 @@ test('thumbnail queue limits simultaneous work and skips cancelled offscreen req
   expect(peak).toBe(2);
   expect(cancelledStarted).toBe(false);
 });
+
+test('leaving the thumbnail window does not abort a job that already started', async () => {
+  const enqueue = createTaskQueue(1);
+  const controller = new AbortController();
+  let finish;
+  const started = enqueue(() => new Promise((resolve) => { finish = resolve; }), controller.signal);
+  await Promise.resolve();
+  controller.abort();
+  finish('saved JPEG');
+  expect(await started).toBe('saved JPEG');
+});

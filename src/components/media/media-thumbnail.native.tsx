@@ -8,7 +8,16 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import type { MediaThumbnailProps } from './media-thumbnail.types';
 
-export function MediaThumbnail({ source, cacheKey, name, video = false, enabled = true }: MediaThumbnailProps) {
+export function MediaThumbnail(props: MediaThumbnailProps) {
+  const colors = useTheme();
+  // Unmount the query observer outside the buffer: TanStack aborts its queued
+  // request. Started native jobs still finish and persist their thumbnail.
+  return props.enabled === false
+    ? <View style={tw.style('w-full h-full', { backgroundColor: colors.backgroundElement })} />
+    : <ActiveThumbnail {...props} />;
+}
+
+function ActiveThumbnail({ source, cacheKey, name, video = false }: MediaThumbnailProps) {
   const colors = useTheme();
   const revision = useServerStore((state) => state.revision);
   const identity = JSON.stringify(cacheKey);
@@ -18,7 +27,7 @@ export function MediaThumbnail({ source, cacheKey, name, video = false, enabled 
   const failed = failedKey === failureKey;
   const preview = useQuery({ queryKey: ['media-thumbnail', ...cacheKey, revision],
     queryFn: ({ signal }) => getMediaThumbnail(source, cacheKey, video, signal),
-    enabled, staleTime: Infinity, gcTime: 30_000, retry: false,
+    staleTime: Infinity, gcTime: 30_000, retry: false,
     // Disk hits must work offline. Network misses fail normally and offer retry.
     networkMode: 'always',
   });

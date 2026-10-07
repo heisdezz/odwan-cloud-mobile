@@ -104,7 +104,7 @@ These are reusable components and comparison examples; they do not add uploads o
 
 ## Grid zoom and video previews
 
-Photos and Gallery support 2–6 columns using `react-native-zoom-grid`, which uses Legend List internally. Pinch inward to show more columns; spread outward for larger tiles. The saved Bun patch restores scrolling after cancelled gestures, uses the actual viewport, and supplies exact square tile sizes. Rows recycle with preview errors scoped to each media item. App styling uses `twrnc`.
+Photos and Gallery use a single FlashList with 2–6 columns. Pinch inward to show more columns; spread outward for larger tiles. Reanimated previews the pinch on the UI thread, then the grid commits its new density once, preserving the focal asset vertically. A Native gesture is attached to the actual scroll view and is simultaneous with pinch; cancellation restores the preview without disabling scrolling. App styling uses `twrnc`.
 
 Photo and video thumbnails are generated on demand, bounded to 256×256 without stretching, compressed as JPEGs, and stored in the app's documents directory. Subsequent mounts and app sessions reuse these files. At most two generation jobs run concurrently; offscreen queued jobs can be cancelled, while started jobs finish publishing their output. Video frames use `expo-video` with a 20-second deadline. Unsupported codecs or inaccessible files expose a retry action.
 
@@ -112,7 +112,7 @@ Local preview keys include asset ID and modification time. Server disk keys incl
 
 ## Local gallery index
 
-The root `GallerySyncProvider` checks existing media permissions at app launch and starts syncing the accessible phone library into `odwan-local.db`. Gallery and its viewer page through SQLite rather than querying MediaStore during scrolling. The first scan progressively makes media available; later launches read the saved index while another scan reconciles it. Pull to refresh, app resume, and debounced library notifications trigger another scan.
+The root `GallerySyncProvider` checks existing media permissions at app launch and starts syncing the accessible phone library into `odwan-local.db`. Gallery reads the full saved metadata index from SQLite in one query. Its viewer receives the same complete list; scrolling does not append another metadata page. FlashList recycles a bounded set of cells, and thumbnail queries mount only for visible rows plus a two-row buffer on either side. Measurement and distant pooled cells do not request thumbnails. Leaving this window cancels queued jobs; started jobs finish and persist their JPEG. The first scan progressively makes media available; later launches read the saved index while another scan reconciles it. Pull to refresh, app resume, and debounced library notifications trigger another scan.
 
 Media queries and SQLite writes execute on native I/O queues while the app is open. Each scan page uses two bound bulk SQL writes instead of two calls per asset; SQLite parses the page on its worker. The JavaScript coordinator waits for an idle slot between pages, with a 32ms minimum pause and a bounded idle timeout. Initial gallery refreshes are limited to once every five seconds; cached-library scans publish at completion without per-page React progress updates. It is not an OS background service and does not promise work after the app is terminated. Metadata is scanned in full for reconciliation, but unchanged metadata is not rewritten and thumbnails are generated only when requested by cells.
 

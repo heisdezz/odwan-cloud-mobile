@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanGallery } from '../src/lib/gallery-sync';
 import { LOCAL_STORE_SCHEMA, GALLERY_INDEX_MIGRATION } from '../src/db/schema';
-import { UPSERT_INDEXED_ASSET_SQL, UPSERT_GALLERY_INDEX_SQL, FINISH_GALLERY_SCAN_SQL, READ_GALLERY_SQL } from '../src/db/queries';
+import { UPSERT_INDEXED_ASSET_SQL, UPSERT_GALLERY_INDEX_SQL, FINISH_GALLERY_SCAN_SQL, READ_GALLERY_SQL, READ_FULL_GALLERY_SQL, READ_GALLERY_BACKUPS_SQL } from '../src/db/queries';
 
 const asset = (id, modifiedAt = 1, createdAt = 10) => ({ id, modifiedAt, createdAt,
   uri: `content://${id}`, filename: `${id}.jpg`, mediaType: 'image', width: 256, height: 256 });
@@ -33,6 +33,10 @@ test('migration preserves versioned backup history and the gallery reads only cu
     s.db.run(FINISH_GALLERY_SCAN_SQL, 'second');
     expect(s.read().map((a) => [a.id, a.modifiedAt])).toEqual([['new', 1], ['changed', 2]]);
     expect(s.db.query('SELECT remote_id FROM backup_status').get()).toEqual({ remote_id: 'remote' });
+    expect(s.db.query(READ_GALLERY_BACKUPS_SQL).all('server', 'account')).toHaveLength(0);
+    s.db.run("INSERT INTO backup_status VALUES ('changed',2,'server','account','pending',NULL,NULL,NULL,2)");
+    expect(s.db.query(READ_GALLERY_BACKUPS_SQL).all('server', 'account')).toEqual([{ asset_id: 'changed', status: 'pending' }]);
+    expect(s.db.query(READ_GALLERY_BACKUPS_SQL).all('server', 'other')).toHaveLength(0);
     expect(s.db.query('SELECT COUNT(*) AS n FROM local_assets').get().n).toBe(4);
     expect(s.db.query('PRAGMA user_version').get().user_version).toBe(2);
     // Applying the migration again is safe.
@@ -143,5 +147,8 @@ test('the next app session can page its saved gallery without querying the phone
     expect(first[0].id).toBe('photo-249');
     expect(next[0].id).toBe('photo-129');
     expect(db.query(READ_GALLERY_SQL).all(121, 240)).toHaveLength(10);
+    const full = db.query(READ_FULL_GALLERY_SQL).all();
+    expect(full).toHaveLength(250);
+    expect(full[249].id).toBe('photo-0');
   } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
 });

@@ -30,7 +30,7 @@ export async function loadDeviceAlbumAssets(id: string, signal: AbortSignal): Pr
     if (signal.aborted) throw new Error('Album loading cancelled.');
     assets.push(...page.assets);
     if (page.next === undefined) break;
-    if (seenCursors.has(page.next)) throw new Error('Could not load the remaining album items. Pull to refresh and try again.');
+    if (seenCursors.has(page.next)) throw new Error('Could not load the remaining album items. Tap Refresh and try again.');
     seenCursors.add(page.next);
     cursor = page.next;
   } while (true);

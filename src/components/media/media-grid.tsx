@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useMediaViewer } from "@/providers/media-viewer-provider";
 import { remoteViewerItem } from "@/helpers/media-viewer";
+import { useGridStore } from '@/stores/grid-store';
 import { GridZoom } from "./grid-zoom";
 import { MediaThumbnail } from "./media-thumbnail";
 import { MediaTileBadges } from "./media-tile-badges";
@@ -99,8 +100,6 @@ type MediaGridProps = {
   items: MediaItemResponse[];
   serverUrl: string;
   token: string;
-  refreshing: boolean;
-  onRefresh: () => void;
   onLoadMore: () => void;
   loadingMore: boolean;
   error?: unknown;
@@ -112,14 +111,13 @@ export function MediaGrid({
   items,
   serverUrl,
   token,
-  refreshing,
-  onRefresh,
   onLoadMore,
   loadingMore,
   error,
   albumId,
   loadViewerPage,
 }: MediaGridProps) {
+  const mediaFilter = useGridStore((state) => state.mediaFilter);
   const colors = useTheme();
   const viewer = useMediaViewer();
   const itemsRef = useRef(items);
@@ -145,6 +143,7 @@ export function MediaGrid({
   };
   return (
     <GridZoom
+      key={mediaFilter}
       data={items}
       keyExtractor={(item) => item.id}
       renderItem={({ item, size, previewEnabled }) => (
@@ -158,14 +157,12 @@ export function MediaGrid({
         />
       )}
       contentInsets={{ bottom: BottomTabInset + 24 }}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
       onEndReached={onLoadMore}
       onEndReachedThreshold={0.5}
       ListEmptyComponent={
         <View style={tw`px-6 py-20 gap-3 items-center`}>
           <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
-            No media yet
+            {mediaFilter === 'all' ? 'No media yet' : `No ${mediaFilter} found`}
           </Text>
           <Text
             style={tw.style("text-base text-center", {

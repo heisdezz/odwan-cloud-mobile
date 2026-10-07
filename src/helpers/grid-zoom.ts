@@ -3,6 +3,7 @@ export const MAX_GRID_COLUMNS = 6;
 export const clampColumns = (value: number) => Math.max(MIN_GRID_COLUMNS, Math.min(MAX_GRID_COLUMNS, Math.round(value)));
 
 export function gridWindow(count: number, columns: number, width: number, height: number, offset: number, top = 0, bufferRows = 2) {
+  'worklet';
   const size = width / columns;
   const firstRow = Math.max(0, Math.floor((offset - top) / size));
   const lastRow = Math.max(firstRow, Math.ceil((offset + height - top) / size) - 1);

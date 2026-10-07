@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useQuery } from '@tanstack/react-query';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
+import { MediaTypeFilter } from '@/components/media/media-filter';
+import { matchesMediaFilter } from '@/helpers/media-filter';
+import { useGridStore } from '@/stores/grid-store';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { MediaThumbnail } from '@/components/media/media-thumbnail';
 import { MediaTileBadges } from '@/components/media/media-tile-badges';
@@ -46,7 +49,9 @@ function GalleryContent() {
     queryKey: ['device-gallery', 'all'], enabled: cacheReadable && database.isSuccess,
     queryFn: readFullGallery, networkMode: 'always', staleTime: Infinity,
   });
-  const assets = gallery.data ?? EMPTY_ASSETS;
+  const mediaFilter = useGridStore((state) => state.mediaFilter);
+  const allAssets = gallery.data ?? EMPTY_ASSETS;
+  const assets = useMemo(() => mediaFilter === 'all' ? allAssets : allAssets.filter((asset) => matchesMediaFilter(asset.mediaType, mediaFilter)), [allAssets, mediaFilter]);
   const viewer = useMediaViewer();
   const assetsRef = useRef(assets);
   useEffect(() => { assetsRef.current = assets; }, [assets]);
@@ -72,6 +77,7 @@ function GalleryContent() {
     <Button label={permission.canAskAgain ? 'Allow gallery access' : 'Open app settings'} loading={requesting} onPress={() => { void grantAccess(); }} />
   </View>;
   return <View style={tw`flex-1`}>
+    <MediaTypeFilter refreshing={sync.running} onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }} />
     {!cacheReadable ? <ActivityIndicator color={colors.text} style={tw`py-4`} /> : null}
     {sync.error && <View style={tw`px-6 py-2 gap-2`}>
       <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{sync.error}</Text>
@@ -83,13 +89,11 @@ function GalleryContent() {
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     {cacheReadable && <PageLoader query={gallery}>
-      {() => <GridZoom data={assets}
+      {() => <GridZoom key={mediaFilter} data={assets}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
         renderItem={({ item, size, previewEnabled }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} />}
         contentInsets={{ bottom: BottomTabInset + 24 }}
-        refreshing={sync.running}
-        onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }}
-        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : 'No photos or videos are accessible.'}</Text>}
+        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : mediaFilter === 'all' ? 'No photos or videos are accessible.' : `No ${mediaFilter} are accessible.`}</Text>}
         ListFooterComponent={gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
           <Button label="Retry" onPress={() => { void gallery.refetch(); }} />

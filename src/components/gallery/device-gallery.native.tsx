@@ -3,8 +3,10 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlashList, useRecyclingState } from '@shopify/flash-list';
 import { Image } from 'expo-image';
+import { GridZoom } from '@/components/media/grid-zoom';
+import { VideoThumbnail } from '@/components/media/video-thumbnail';
 import { addListener, presentPermissionsPicker, usePermissions, loadDeviceMedia, type GalleryCursor } from '@/lib/device-media.native';
-import { ActivityIndicator, AppState, Linking, Platform, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 import PageLoader from '@/components/layouts/PageLoader';
 import { Button } from '@/components/ui';
@@ -16,14 +18,14 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
 
-function GalleryTile({ asset, status }: { asset: LocalAsset; status?: BackupStatus }) {
+function GalleryTile({ asset, status, previewEnabled }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean }) {
   const colors = useTheme();
   const [failed, setFailed] = useRecyclingState(false, [asset.id, asset.modifiedAt]);
-  return <View accessible accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
+  return <View accessible={asset.mediaType !== 'video'} accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     aspectRatio: asset.width > 0 && asset.height > 0 ? Math.max(0.5, Math.min(2, asset.width / asset.height)) : 1,
     backgroundColor: colors.backgroundElement,
   })}>
-    {!failed && asset.mediaType === 'image' ? <Image source={asset.uri} recyclingKey={`${asset.id}:${asset.modifiedAt}`} contentFit="cover" style={tw`w-full h-full`} cachePolicy="memory" onError={() => setFailed(true)} />
+    {asset.mediaType === 'video' ? <VideoThumbnail source={{ uri: asset.uri, useCaching: false }} cacheKey={['local', asset.id, asset.modifiedAt]} name={asset.filename} local enabled={previewEnabled} /> : !failed && asset.mediaType === 'image' ? <Image source={asset.uri} recyclingKey={`${asset.id}:${asset.modifiedAt}`} contentFit="cover" style={tw`w-full h-full`} cachePolicy="memory" onError={() => setFailed(true)} />
       : <View style={tw`flex-1 justify-center items-center px-3 gap-2`}>
         <Text style={tw.style('text-sm font-medium', { color: colors.text })}>{asset.mediaType === 'video' ? 'Video' : 'Preview unavailable'}</Text>
         <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>{asset.filename}</Text>
@@ -36,7 +38,6 @@ function GalleryTile({ asset, status }: { asset: LocalAsset; status?: BackupStat
 
 function GalleryContent() {
   const colors = useTheme();
-  const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
   const [permission, requestPermission, getPermission] = usePermissions({ granularPermissions: ['photo', 'video'] });
   const [requesting, setRequesting] = useState(false);
@@ -89,9 +90,9 @@ function GalleryContent() {
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     <PageLoader query={gallery}>
-      {() => <FlashList data={assets} masonry numColumns={Math.min(6, Math.max(2, Math.floor(width / 150)))} optimizeItemArrangement={false}
+      {() => <GridZoom>{(columns) => <FlashList data={assets} masonry numColumns={columns} optimizeItemArrangement={false}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
-        renderItem={({ item }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} />}
+        renderItem={({ item, target }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={target === 'Cell'} />}
         contentContainerStyle={tw.style('px-0.5', { paddingBottom: BottomTabInset + 24 })}
         refreshing={gallery.isRefetching && !gallery.isFetchingNextPage}
         onRefresh={() => { void getPermission(); setGeneration((value) => value + 1); void queryClient.invalidateQueries({ queryKey: ['backup-status'] }); }}
@@ -102,7 +103,7 @@ function GalleryContent() {
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
           <Button label="Retry" onPress={() => { if (gallery.isFetchNextPageError) void gallery.fetchNextPage(); else void gallery.refetch(); }} />
         </View> : null}
-      />}
+      />}</GridZoom>}
     </PageLoader>
   </View>;
 }

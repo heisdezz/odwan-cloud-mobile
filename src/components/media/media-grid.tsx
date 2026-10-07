@@ -1,7 +1,10 @@
 import { memo } from 'react';
 import { FlashList, useRecyclingState } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { ActivityIndicator, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { GridZoom } from './grid-zoom';
+import { VideoThumbnail } from './video-thumbnail';
+import { useServerStore } from '@/stores/server-store';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
 import { extract_message } from '@/helpers/api';
@@ -10,13 +13,16 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import type { MediaItemResponse } from '../../../pocketbase-types';
 
-const MediaTile = memo(function MediaTile({ item, serverUrl, token }: { item: MediaItemResponse; serverUrl: string; token: string }) {
+const MediaTile = memo(function MediaTile({ item, serverUrl, token, previewEnabled }: { item: MediaItemResponse; serverUrl: string; token: string; previewEnabled: boolean }) {
   const colors = useTheme();
   const [failed, setFailed] = useRecyclingState(false, [item.id, serverUrl, token]);
+  const revision = useServerStore((state) => state.revision);
+  const accountId = useServerStore((state) => state.account?.id);
   const video = item.mime_type.startsWith('video/');
-  const available = item.upload_status === 'success' && !!item.storage_key;
-  return <View accessible accessibilityLabel={`${video ? 'Video' : 'Photo'}: ${mediaName(item)}`} style={tw.style('m-0.5 overflow-hidden', { aspectRatio: mediaAspectRatio(item.metadata_json), backgroundColor: colors.backgroundElement })}>
-    {available && !video && !failed ? <Image
+  const available = item.upload_status === 'success' && !!item.storage_backend && !!item.storage_bucket && !!item.storage_key;
+  return <View accessible={!video} accessibilityLabel={`${video ? 'Video' : 'Photo'}: ${mediaName(item)}`} style={tw.style('m-0.5 overflow-hidden', { aspectRatio: mediaAspectRatio(item.metadata_json), backgroundColor: colors.backgroundElement })}>
+    {available && video ? <VideoThumbnail source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token }, useCaching: false }}
+      cacheKey={['remote', serverUrl, accountId ?? '', revision, item.id, item.file_hash, item.storage_backend, item.storage_bucket, item.storage_key]} name={mediaName(item)} enabled={previewEnabled} /> : available && !video && !failed ? <Image
       source={{ uri: mediaStreamUrl(serverUrl, item.id), headers: { Authorization: token } }}
       recyclingKey={`${serverUrl}:${item.id}:${item.file_hash}`}
       style={tw`w-full h-full`} contentFit="cover" cachePolicy="memory" transition={0}
@@ -41,12 +47,10 @@ type MediaGridProps = {
 
 export function MediaGrid({ items, serverUrl, token, refreshing, onRefresh, onLoadMore, loadingMore, error }: MediaGridProps) {
   const colors = useTheme();
-  const { width } = useWindowDimensions();
-  const columns = Math.min(6, Math.max(2, Math.floor(width / 150)));
-  return <FlashList
+  return <GridZoom>{(columns) => <FlashList
     masonry numColumns={columns} optimizeItemArrangement={false}
     data={items} keyExtractor={(item) => item.id}
-    renderItem={({ item }) => <MediaTile item={item} serverUrl={serverUrl} token={token} />}
+    renderItem={({ item, target }) => <MediaTile item={item} serverUrl={serverUrl} token={token} previewEnabled={target === 'Cell'} />}
     contentContainerStyle={tw.style('px-0.5', { paddingBottom: BottomTabInset + 24 })}
     refreshing={refreshing} onRefresh={onRefresh}
     onEndReached={onLoadMore} onEndReachedThreshold={0.5}
@@ -58,5 +62,5 @@ export function MediaGrid({ items, serverUrl, token, refreshing, onRefresh, onLo
       <Text accessibilityRole="alert" style={tw.style('text-base', { color: colors.text })}>{extract_message(error)}</Text>
       <Button label="Retry" onPress={onLoadMore} />
     </View> : null}
-  />;
+  />}</GridZoom>;
 }

@@ -73,11 +73,11 @@ Server configuration and authentication are in memory for the current session; p
 
 Home loads `media_item` records in pages of 60 using React Query and FlashList v2 masonry. It includes pull-to-refresh, pagination, empty/error states, recycled image cells, and responsive columns. Queries are scoped to the server and account. Images use authenticated `/api/media/{id}/stream` requests; tokens are sent in headers and images use memory caching.
 
-Tile proportions come from `metadata_json.width` and `metadata_json.height` when available, with a square fallback. The current Go backend streams originals and has no thumbnail endpoint: video items show filenames instead of thumbnails, and image downloads can be larger than a dedicated thumbnail would be. Backend thumbnail support is the next step for large libraries.
+Tile proportions come from `metadata_json.width` and `metadata_json.height` when available, with a square fallback. The current Go backend streams originals and has no thumbnail endpoint. Native video tiles generate bounded preview frames from the authenticated stream with `expo-video`; image tiles still load originals. Dedicated backend thumbnails would reduce network work for large libraries.
 
 ## Device Gallery and local backup tracking
 
-Gallery reads the phone's photos and videos with `expo-media-library` and displays paginated FlashList masonry tiles. Access is requested from the Gallery screen; denied and limited access are handled explicitly. Photo previews load locally, while videos currently show filenames. Web shows a native-device fallback. Android Expo Go blocks broad gallery permissions, so Gallery shows a development-build message there. A conditional adapter uses the class-based API when available and the legacy API in compatible native runtimes.
+Gallery reads the phone's photos and videos with `expo-media-library` and displays paginated FlashList masonry tiles. Access is requested from the Gallery screen; denied and limited access are handled explicitly. Photo previews load locally, and native video tiles generate preview frames from their local asset URI. Web shows a native-device fallback. Android Expo Go blocks broad gallery permissions, so Gallery shows a development-build message there. A conditional adapter uses the class-based API when available and the legacy API in compatible native runtimes.
 
 `expo-sqlite` persists discovered asset metadata in `odwan-local.db`. Backup records are scoped to the server URL, account, asset ID, and modification time, so editing an asset or switching accounts does not inherit an earlier backup status. `src/db/local-store.native.ts` exposes `rememberAssets`, `readBackupStatuses`, and `recordBackupStatus` for the future upload worker. Marking an asset `backed_up` requires a confirmed remote record ID and file hash. Untracked assets show “Not tracked”; no uploads or reconciliation of existing server files happen yet. Credentials are not stored in SQLite.
 
@@ -101,3 +101,11 @@ Explore now includes working examples for both `@gorhom/bottom-sheet` and `react
 - `BottomSheetModalProvider` is installed at the app root for Gorhom portals. App-owned component styling uses `twrnc`.
 
 These are reusable components and comparison examples; they do not add uploads or change the backend contract in `BACKEND.MD`. Rebuild the native app after installing `expo-video`, `expo-dev-client`, or the image zoom package. `.env` is local-only; copy `.env.example` for optional configuration.
+
+## Grid zoom and video previews
+
+Photos and Gallery both support 1–6 columns. Pinch inward to show more columns, spread outward for larger tiles, or use Zoom in/Zoom out. Density changes once at the end of a pinch, so scrolling does not repeatedly trigger masonry layout updates. FlashList keeps its mounted list and visible-content positioning as columns change.
+
+Native video previews use the existing `expo-video` dependency. Only cell renders request previews; measurement renders do not decode videos. At most two decoders run concurrently. Leaving a cell cancels queued or active work, and each request has a 20-second deadline. Frames are capped at 320×320 and cached in React Query for reuse, with unused queries collected after 30 seconds. Sources do not play or use persistent video caching. Failed previews expose a retry action.
+
+Local preview keys include asset ID and modification time. Server keys include account, connection revision, file hash, and storage mapping; authorization is sent in request headers. Browsers retain video placeholders because the native frame-generation API is unavailable there. Unsupported codecs or inaccessible cloud files can still fail; the backend contract remains unchanged.

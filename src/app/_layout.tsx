@@ -1,3 +1,6 @@
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { Toaster } from 'sonner-native';
+import { QueryProvider } from '@/providers/query-provider';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import tw from '@/lib/tw';
@@ -14,7 +17,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  return <GestureHandlerRootView style={tw`flex-1`}><AppThemeProvider><ThemedNavigation /></AppThemeProvider></GestureHandlerRootView>;
+  return <GestureHandlerRootView style={tw`flex-1`}><QueryProvider><AppThemeProvider><BottomSheetModalProvider><ThemedNavigation /></BottomSheetModalProvider></AppThemeProvider></QueryProvider></GestureHandlerRootView>;
 }
 
 function ThemedNavigation() {
@@ -26,7 +29,9 @@ function ThemedNavigation() {
       <AnimatedSplashOverlay />
       <Stack initialRouteName="(main)" screenOptions={{ headerShown: true }}>
         <Stack.Screen name="(main)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/index" options={{ title: 'Log in' }} />
       </Stack>
+      <Toaster theme={colorScheme} position="top-center" />
     </ThemeProvider>
   );
 }

@@ -10,6 +10,18 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "debug": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "bun": "1.4.0",
+      "env": {
+        "EXPO_NO_DOTENV": "1"
+      },
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "withoutCredentials": true
+      }
     }
   }
 }

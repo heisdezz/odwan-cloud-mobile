@@ -1,3 +1,4 @@
+import { OverlayPreview } from '@/components/overlays/overlay-preview';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button, Checkbox, Input, Switch } from './controls';
@@ -21,5 +22,6 @@ export function ComponentPreview() {
     <Button label={saved ? 'Saved' : 'Save example'} disabled={!name.trim() || !accepted} onPress={() => setSaved(true)} />
     <Button label={`Use ${colorScheme === 'dark' ? 'light' : 'dark'} theme`} variant="tonal" onPress={() => { void toggleTheme(); }} />
     <Button label="Follow device theme" variant="outlined" disabled={mode === 'system'} onPress={() => { void setTheme('system'); }} />
+    <OverlayPreview />
   </View>;
 }

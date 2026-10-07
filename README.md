@@ -61,3 +61,49 @@ Theme selection lasts for the current session. `react-native-theme-switch-animat
 The floating navigation uses `react-native-jelly-tabs` with Expo Router's headless tabs. Its controlled selection follows route changes, including Android back navigation. App-owned layout, icons, and labels use `twrnc`.
 
 Jelly Tabs uses Reanimated, Gesture Handler, SVG, and Masked View. The root layout includes `GestureHandlerRootView`. The old animated-nav-tab-bar package and its compatibility patch have been removed.
+
+## Server and superuser login
+
+Settings accepts an HTTP(S) base URL and checks `GET /api/test/connection`. The endpoint must return `ok` as plain text or a JSON string. Non-success HTTP responses, unexpected bodies, and requests exceeding 10 seconds show an error. Login becomes available after a successful check and opens `/auth`, which authenticates against PocketBase's `_superusers` collection.
+
+React Query owns request state and the root query provider tracks native app focus. Zustand holds the URL, verified connection, and account metadata. sonner-native displays feedback throughout the app. Editing the URL or retesting clears verification and authentication; responses from older checks or logins cannot change the current session. Logout clears the PocketBase auth store and query cache.
+
+Server configuration and authentication are in memory for the current session; passwords and tokens are not written to device storage. Use the server's LAN address when connecting from a physical phone. Connection and authentication tests run with `bun test tests/server-connection.test.js` and use mock responses, not live credentials.
+
+## Photos library
+
+`src/helpers/api.ts` exports `extract_message(error: unknown)` for PocketBase and standard errors. `PageLoader` accepts a typed React Query result, custom loading/empty content, and either ordinary children or a data render function. It retries initial errors and preserves existing content during background refetches.
+
+Home loads `media_item` records in pages of 60 using React Query and FlashList v2 masonry. It includes pull-to-refresh, pagination, empty/error states, recycled image cells, and responsive columns. Queries are scoped to the server and account. Images use authenticated `/api/media/{id}/stream` requests; tokens are sent in headers and images use memory caching.
+
+Tile proportions come from `metadata_json.width` and `metadata_json.height` when available, with a square fallback. The current Go backend streams originals and has no thumbnail endpoint: video items show filenames instead of thumbnails, and image downloads can be larger than a dedicated thumbnail would be. Backend thumbnail support is the next step for large libraries.
+
+## Device Gallery and local backup tracking
+
+Gallery reads the phone's photos and videos with `expo-media-library` and displays paginated FlashList masonry tiles. Access is requested from the Gallery screen; denied and limited access are handled explicitly. Photo previews load locally, while videos currently show filenames. Web shows a native-device fallback. Android Expo Go blocks broad gallery permissions, so Gallery shows a development-build message there. A conditional adapter uses the class-based API when available and the legacy API in compatible native runtimes.
+
+`expo-sqlite` persists discovered asset metadata in `odwan-local.db`. Backup records are scoped to the server URL, account, asset ID, and modification time, so editing an asset or switching accounts does not inherit an earlier backup status. `src/db/local-store.native.ts` exposes `rememberAssets`, `readBackupStatuses`, and `recordBackupStatus` for the future upload worker. Marking an asset `backed_up` requires a confirmed remote record ID and file hash. Untracked assets show “Not tracked”; no uploads or reconciliation of existing server files happen yet. Credentials are not stored in SQLite.
+
+The media-library config plugin requests photo/video permissions without location access. Rebuild existing native development/release builds to apply the permission configuration. SQLite schema persistence and integrity checks run with `bun test tests/local-store.test.js`.
+
+## Debug APK from GitHub Actions
+
+Run **Actions → Android debug APK → Run workflow**. The workflow installs from `bun.lock`, caches Bun downloads, runs lint/typecheck/tests, and builds on EAS cloud using the `debug` profile. Only ARM64 is built. The APK is attached to the workflow run as `odwan-debug-arm64-<run number>` for seven days, without redundant ZIP compression. Builds are manual and serialized per branch to avoid wasting EAS quota. EAS retains its normal native build caches; GitHub does not generate or commit native projects.
+
+One-time repository configuration under **Settings → Secrets and variables → Actions**:
+
+- Secret `EXPO_TOKEN`: an Expo access token that can build your project.
+- Variable `EXPO_PROJECT_ID`: the UUID of the Expo project for this app (slug `odwan`). Create the project in your Expo account first if necessary. `app.config.ts` reads this value; no access token is included in app config.
+
+The debug APK uses `expo-dev-client`, the debug keystore, and `:app:assembleDebug`; production signing credentials are not required. Install it on an ARM64 phone, run `bunx expo start --dev-client`, and connect from the launcher. It needs Metro and is larger than the optimized release APK. Use `preview` for a standalone APK with the bundled JavaScript and release shrinking. The Android application ID is `com.heisdezz.odwan`.
+
+## Media and overlay components
+
+Explore now includes working examples for both `@gorhom/bottom-sheet` and `react-native-actions-sheet`, plus a modal, image zoom, and a video URL player. Compare gestures, backdrop dismissal, Android Back, and keyboard movement before choosing a single sheet package for production.
+
+- `VideoPlayer` uses `expo-video`, creates a player only while mounted, releases it on unmount, pauses in the background, and loads source changes asynchronously. It streams directly and disables persistent video caching in the example.
+- Native `ImageViewer` uses `react-native-zoom-toolkit` with `expo-image` for pinch/double-tap zoom and memory caching. Web uses an image modal fallback. Source objects may include authenticated request headers.
+- `AppModal` wraps `react-native-modal` with themed content, backdrop/Back dismissal, keyboard avoidance, and safe-area margins.
+- `BottomSheetModalProvider` is installed at the app root for Gorhom portals. App-owned component styling uses `twrnc`.
+
+These are reusable components and comparison examples; they do not add uploads or change the backend contract in `BACKEND.MD`. Rebuild the native app after installing `expo-video`, `expo-dev-client`, or the image zoom package. `.env` is local-only; copy `.env.example` for optional configuration.

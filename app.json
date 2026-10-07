@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.heisdezz.odwan"
     },
     "web": {
       "output": "static",
@@ -50,7 +51,21 @@
             "webpAnimated": false
           }
         }
-      ]
+      ],
+      "expo-sqlite",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Odwan to browse photos and track their backup status.",
+          "savePhotosPermission": "Allow Odwan to save photos.",
+          "granularPermissions": [
+            "photo",
+            "video"
+          ],
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,98 +1,41 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { router } from 'expo-router';
+import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { pb } from '@/client/pb';
+import PageLoader from '@/components/layouts/PageLoader';
+import { MediaGrid } from '@/components/media/media-grid';
+import { Button } from '@/components/ui';
+import { useMediaItems } from '@/hooks/use-media-items';
+import { useTheme } from '@/hooks/use-theme';
+import tw from '@/lib/tw';
+import { useServerStore } from '@/stores/server-store';
 
 export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
+  const colors = useTheme();
+  const { verifiedUrl, account } = useServerStore();
+  const query = useMediaItems();
+  const items = useMemo(() => {
+    const records = query.data?.pages.flatMap((page) => page.items) ?? [];
+    return [...new Map(records.map((item) => [item.id, item])).values()];
+  }, [query.data]);
+  return <SafeAreaView edges={['top']} style={tw.style('flex-1', { backgroundColor: colors.background })}>
+    <Text style={tw.style('text-3xl font-semibold px-6 pt-6 pb-4', { color: colors.text })}>Photos</Text>
+    {!verifiedUrl || !account ? <View style={tw`flex-1 justify-center px-6 gap-4 pb-24`}>
+      <Text style={tw.style('text-xl font-medium text-center', { color: colors.text })}>Your photo library</Text>
+      <Text style={tw.style('text-base text-center', { color: colors.textSecondary })}>Connect to your server and log in to see your media.</Text>
+      <Button label="Open Settings" onPress={() => router.navigate('/settings')} />
+    </View> : <PageLoader query={query}>
+      {() => <MediaGrid items={items} serverUrl={verifiedUrl} token={pb.authStore.token}
+        refreshing={query.isRefetching && !query.isFetchingNextPage}
+        onRefresh={() => { void query.refetch(); }}
+        onLoadMore={() => {
+          if (query.isFetching) return;
+          if (query.isFetchNextPageError || query.hasNextPage) void query.fetchNextPage();
+          else if (query.isRefetchError) void query.refetch();
+        }}
+        loadingMore={query.isFetchingNextPage} error={query.error}
+      />}
+    </PageLoader>}
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});

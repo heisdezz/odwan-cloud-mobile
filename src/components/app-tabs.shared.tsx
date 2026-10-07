@@ -11,29 +11,47 @@ import tw from '@/lib/tw';
 type TabBarProps = Pick<ReturnType<typeof useTabsWithTriggers>, 'state' | 'navigation'>;
 
 function HomeIcon({ color }: TabsIconProps) {
-  return <Image source={require('@/assets/images/tabIcons/home-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-7 w-7`} />;
+  return <Image source={require('@/assets/images/tabIcons/home-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-5 w-5`} />;
 }
 
 function ExploreIcon({ color }: TabsIconProps) {
-  return <Image source={require('@/assets/images/tabIcons/explore-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-7 w-7`} />;
+  return <Image source={require('@/assets/images/tabIcons/explore-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-5 w-5`} />;
 }
 
 function ActiveHomeIcon(props: TabsIconProps) {
   return (
-    <View style={tw`flex-row items-center gap-2 px-2`}>
+    <View style={tw`flex-row items-center gap-1`}>
       <HomeIcon {...props} />
-      <Text numberOfLines={1} style={tw.style('text-base font-medium', { color: props.color })}>Home</Text>
+      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Home</Text>
     </View>
   );
 }
 
 function ActiveExploreIcon(props: TabsIconProps) {
   return (
-    <View style={tw`flex-row items-center gap-2 px-2`}>
+    <View style={tw`flex-row items-center gap-1`}>
       <ExploreIcon {...props} />
-      <Text numberOfLines={1} style={tw.style('text-base font-medium', { color: props.color })}>Explore</Text>
+      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Explore</Text>
     </View>
   );
+}
+
+function SettingsIcon({ color }: TabsIconProps) {
+  return <Image source={require('@/assets/images/tabIcons/settings-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-5 w-5`} />;
+}
+
+function ActiveSettingsIcon(props: TabsIconProps) {
+  return <View style={tw`flex-row items-center gap-1`}>
+    <SettingsIcon {...props} />
+    <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Settings</Text>
+  </View>;
+}
+
+function GalleryIcon({ color }: TabsIconProps) {
+  return <Image source={require('@/assets/images/tabIcons/gallery-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-5 w-5`} />;
+}
+function ActiveGalleryIcon(props: TabsIconProps) {
+  return <View style={tw`flex-row items-center gap-1`}><GalleryIcon {...props} /><Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Gallery</Text></View>;
 }
 
 function FloatingTabBar({ state, navigation }: TabBarProps) {
@@ -48,12 +66,14 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
 
   const items = useMemo<TabsItem[]>(() => state.routes.map((route) => {
     const home = route.name === 'index' || route.name === 'home';
+    const settings = route.name === 'settings';
+    const gallery = route.name === 'gallery';
     return {
       key: route.key,
       label: '',
-      accessibilityLabel: home ? 'Home' : 'Explore',
-      activeIcon: home ? ActiveHomeIcon : ActiveExploreIcon,
-      inactiveIcon: home ? HomeIcon : ExploreIcon,
+      accessibilityLabel: home ? 'Home' : settings ? 'Settings' : gallery ? 'Gallery' : 'Explore',
+      activeIcon: home ? ActiveHomeIcon : settings ? ActiveSettingsIcon : gallery ? ActiveGalleryIcon : ActiveExploreIcon,
+      inactiveIcon: home ? HomeIcon : settings ? SettingsIcon : gallery ? GalleryIcon : ExploreIcon,
       labelStyle: tw`text-base font-medium`,
     };
   }), [state.routes]);
@@ -93,7 +113,9 @@ export default function AppTabs() {
   const { NavigationContent, state, navigation } = useTabsWithTriggers({
     triggers: [
       { type: 'internal', name: 'home', href: '/' },
+      { type: 'internal', name: 'gallery', href: '/gallery' },
       { type: 'internal', name: 'explore', href: '/explore' },
+      { type: 'internal', name: 'settings', href: '/settings' },
     ],
     backBehavior: 'history',
   });

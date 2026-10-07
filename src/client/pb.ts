@@ -1,4 +1,5 @@
-import PocketBase from "pocketbase";
-import { TypedPocketBase } from "../../pocketbase-types";
+import PocketBase, { BaseAuthStore } from 'pocketbase';
+import type { TypedPocketBase } from '../../pocketbase-types';
 
-export const pb = new PocketBase(process.env.PB_URL) as TypedPocketBase;
+// Keep credentials in memory, including on web. The URL comes from Settings.
+export const pb = new PocketBase(undefined, new BaseAuthStore()) as TypedPocketBase;

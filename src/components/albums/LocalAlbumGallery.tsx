@@ -45,6 +45,20 @@ const AlbumTile = memo(function AlbumTile({ item, size, previewEnabled, selectin
   </Pressable>;
 });
 
+/** Keep toolbar actions in Yoga so native control measurement cannot expand this row. */
+function AlbumAction({ label, accessibilityLabel = label, onPress, disabled = false }: {
+  label: string; accessibilityLabel?: string; onPress: () => void; disabled?: boolean;
+}) {
+  const colors = useTheme();
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+    accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+    style={({ pressed }) => tw.style('min-h-11 shrink-0 px-3 rounded-full items-center justify-center', {
+      backgroundColor: colors.backgroundElement, opacity: disabled ? 0.38 : pressed ? 0.7 : 1,
+    })}>
+    <Text style={tw.style('text-sm font-medium', { color: colors.text })}>{label}</Text>
+  </Pressable>;
+}
+
 function AlbumContent({ id, title }: { id: string; title?: string }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -85,15 +99,15 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
       status={statuses[item.id]} onToggle={toggle} onOpen={open} onSelect={select} />,
   [selecting, selected, statuses, toggle, open, select]);
   return <View style={tw`flex-1`}>
-    <View style={tw`px-4 pt-2 pb-3 flex-row items-center gap-2`}>
+    <View style={tw`shrink-0 px-4 py-1 flex-row items-center gap-2`}>
       {selecting ? <>
-        <Text accessibilityLiveRegion="polite" style={tw.style('flex-1 text-base font-medium', { color: colors.text })}>{selectedAssets.length} selected</Text>
-        <Button label="All" variant="text" onPress={() => setSelected(new Set(assets.map((asset) => asset.id)))} />
-        <Button label="Cancel" variant="text" onPress={cancel} />
+        <AlbumAction label="Done" accessibilityLabel="Exit selection mode" onPress={cancel} />
+        <Text accessibilityLiveRegion="polite" numberOfLines={1} style={tw.style('flex-1 text-base font-medium', { color: colors.text })}>{selectedAssets.length} selected</Text>
+        <AlbumAction label="All" accessibilityLabel="Select all filtered media" onPress={() => setSelected(new Set(assets.map((asset) => asset.id)))} />
       </> : <>
-        <Button label="Select" variant="outlined" disabled={!assets.length} onPress={() => setSelecting(true)} />
+        <AlbumAction label="Select" disabled={!assets.length} onPress={() => setSelecting(true)} />
         <View style={tw`flex-1`} />
-        <Button label={pending ? `Uploads (${pending})` : 'Uploads'} variant="text" onPress={() => setSheet('queue')} />
+        <AlbumAction label={pending ? `Uploads (${pending})` : 'Uploads'} onPress={() => setSheet('queue')} />
       </>}
     </View>
     <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />

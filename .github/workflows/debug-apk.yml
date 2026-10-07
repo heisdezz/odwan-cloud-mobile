@@ -48,6 +48,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          # Override v3's obsolete default: 'tools platform-tools'.
+          packages: platform-tools
       - name: Install Android build tools
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006'
       - name: Generate Android project

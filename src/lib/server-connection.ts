@@ -12,7 +12,7 @@ export async function testServerConnection(input: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetch(`${url}/api/test/connection`, { signal: controller.signal });
+    const response = await fetch(`${url}/api/test/connection`, { signal: controller.signal, cache: 'no-store' });
     if (!response.ok) throw new Error(`Connection failed (HTTP ${response.status}).`);
     const body = (await response.text()).trim();
     if (body !== 'ok' && body !== '"ok"') throw new Error('The server did not return ok. Check the URL.');

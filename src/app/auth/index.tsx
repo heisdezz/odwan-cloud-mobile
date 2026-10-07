@@ -1,3 +1,4 @@
+import { clearServerQueries } from '@/lib/server-query-cache';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Redirect, router } from 'expo-router';
@@ -21,7 +22,7 @@ export default function LoginScreen() {
     },
     onSuccess: () => {
       setPassword('');
-      queryClient.removeQueries();
+      clearServerQueries(queryClient);
       toast.success('Logged in');
       router.replace('/settings');
     },

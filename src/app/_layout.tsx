@@ -2,6 +2,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Toaster } from 'sonner-native';
 import { MediaViewerProvider } from '@/providers/media-viewer-provider';
 import { QueryProvider } from '@/providers/query-provider';
+import { ServerSessionProvider } from '@/providers/server-session-provider';
 import { GallerySyncProvider } from '@/providers/gallery-sync-provider';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,7 +21,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  return <GestureHandlerRootView style={tw`flex-1`}><QueryProvider><GallerySyncProvider><AppThemeProvider><BottomSheetModalProvider><MediaViewerProvider><ThemedNavigation /></MediaViewerProvider></BottomSheetModalProvider></AppThemeProvider></GallerySyncProvider></QueryProvider></GestureHandlerRootView>;
+  return <GestureHandlerRootView style={tw`flex-1`}><QueryProvider><ServerSessionProvider><GallerySyncProvider><AppThemeProvider><BottomSheetModalProvider><MediaViewerProvider><ThemedNavigation /></MediaViewerProvider></BottomSheetModalProvider></AppThemeProvider></GallerySyncProvider></ServerSessionProvider></QueryProvider></GestureHandlerRootView>;
 }
 
 function ThemedNavigation() {

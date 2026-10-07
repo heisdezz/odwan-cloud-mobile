@@ -16,6 +16,21 @@ type ServerState = {
 };
 
 export function createServerStore(storage: StateStorage) {
+  let lastSaved: string | null | undefined;
+  const urlStorage: StateStorage = {
+    getItem: (key) => {
+      const saved = storage.getItem(key);
+      if (typeof saved === 'string' || saved === null) lastSaved = saved;
+      return saved;
+    },
+    setItem: (key, value) => {
+      if (value === lastSaved) return;
+      const result = storage.setItem(key, value);
+      lastSaved = value;
+      return result;
+    },
+    removeItem: (key) => { lastSaved = undefined; return storage.removeItem(key); },
+  };
   return create<ServerState>()(persist((set, get) => ({
   urlInput: '', verifiedUrl: null, revision: 0, account: null,
   setUrlInput: (urlInput) => {
@@ -37,10 +52,10 @@ export function createServerStore(storage: StateStorage) {
     return true;
   },
   setAccount: (account) => set({ account }),
-  logout: () => { pb.authStore.clear(); set({ account: null }); },
+  logout: () => { pb.cancelAllRequests(); pb.authStore.clear(); set({ account: null, revision: get().revision + 1 }); },
   }), {
     name: 'odwan-server-preferences',
-    storage: createJSONStorage(() => storage),
+    storage: createJSONStorage(() => urlStorage),
     partialize: ({ urlInput }) => ({ urlInput }),
     merge: (persisted, current) => {
       const urlInput = (persisted as { urlInput?: unknown } | undefined)?.urlInput;

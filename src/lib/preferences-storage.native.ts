@@ -1,9 +1,18 @@
 import Storage from 'expo-sqlite/kv-store';
 import type { StateStorage } from 'zustand/middleware';
+import { nativeMMKV } from './mmkv.native';
+import { migratePreferences } from './migrate-preferences';
 
-// A separate preferences database; restore before the first grid layout.
-export const preferencesStorage: StateStorage = {
-  getItem: (key) => Storage.getItemSync(key),
-  setItem: (key, value) => Storage.setItemSync(key, value),
-  removeItem: (key) => { Storage.removeItemSync(key); },
+const legacy = {
+  getItem: (key: string) => Storage.getItemSync(key),
+  setItem: (key: string, value: string) => Storage.setItemSync(key, value),
+  removeItem: (key: string) => { Storage.removeItemSync(key); },
 };
+
+const mmkv = nativeMMKV?.preferences;
+// Migrate saved server/grid/viewer preferences; Expo Go continues using SQLite.
+export const preferencesStorage: StateStorage = mmkv ? migratePreferences({
+  getItem: (key) => mmkv.getString(key) ?? null,
+  setItem: (key, value) => mmkv.set(key, value),
+  removeItem: (key) => { mmkv.remove(key); },
+}, legacy) : legacy;

@@ -35,3 +35,18 @@ test('invalid or extra persisted fields cannot restore verification or account s
   expect(store.getState().account).toBeNull();
   expect(store.getState().revision).toBe(0);
 });
+
+test('checking/login/logout do not rewrite an unchanged saved URL', () => {
+  const storage = memoryStorage();
+  let writes = 0;
+  const save = storage.setItem;
+  storage.setItem = (key, value) => { writes++; save(key, value); };
+  const store = createServerStore(storage);
+  const state = store.getState();
+  state.setUrlInput('https://example.com');
+  const revision = state.beginCheck();
+  state.verify('https://example.com', revision);
+  state.setAccount({ id: 'user', email: 'test@example.com' });
+  state.logout();
+  expect(writes).toBe(1);
+});

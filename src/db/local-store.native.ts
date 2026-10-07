@@ -1,8 +1,8 @@
-import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, READ_FULL_GALLERY_SQL, READ_GALLERY_BACKUPS_SQL, FINISH_GALLERY_SCAN_SQL } from './queries';
+import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, READ_FULL_GALLERY_SQL, READ_GALLERY_BACKUPS_SQL, FINISH_GALLERY_SCAN_SQL, RECONCILE_GALLERY_IDS_SQL, DELETE_GALLERY_IDS_SQL, SAVE_GALLERY_SYNC_SQL } from './queries';
 import { writeGalleryBatch } from './gallery-index';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
-import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
+import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, GALLERY_SYNC_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
 
 // Keep the connection/queue through Fast Refresh; a second JS module must not race it.
 type DatabaseAccess = ReturnType<typeof createDatabaseAccess<SQLiteDatabase>>;
@@ -12,11 +12,12 @@ const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
   initialize: async (db) => {
     await db.execAsync('PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;');
     const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if ((version?.user_version ?? 0) > 2) throw new Error('Local database is newer than this app. Update the app.');
+    if ((version?.user_version ?? 0) > 3) throw new Error('Local database is newer than this app. Update the app.');
     const journal = await db.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode');
     if (journal?.journal_mode.toLowerCase() !== 'wal') await db.execAsync('PRAGMA journal_mode = WAL;');
     if ((version?.user_version ?? 0) < 1) await db.withTransactionAsync(() => db.execAsync(LOCAL_STORE_TABLES));
     if ((version?.user_version ?? 0) < 2) await db.withTransactionAsync(() => db.execAsync(GALLERY_INDEX_MIGRATION));
+    if ((version?.user_version ?? 0) < 3) await db.withTransactionAsync(() => db.execAsync(GALLERY_SYNC_MIGRATION));
   },
   close: (db) => db.closeAsync(),
 });
@@ -46,7 +47,32 @@ export function finishGalleryScan(scanId: string, signal?: AbortSignal) {
   });
 }
 export function clearGalleryIndex() {
-  return access.run((db) => db.runAsync('DELETE FROM gallery_index'));
+  return access.run((db) => db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM gallery_index');
+    await db.runAsync('DELETE FROM gallery_sync_state');
+  }));
+}
+export function readGalleryCheckpoint() {
+  return access.run((db) => db.getFirstAsync<{ checkedAt: number; accessScope: string }>('SELECT checked_at AS checkedAt, access_scope AS accessScope FROM gallery_sync_state WHERE id=1'));
+}
+export function readGalleryIds() {
+  return access.run(async (db) => (await db.getAllAsync<{ id: string }>('SELECT asset_id AS id FROM gallery_index')).map((row) => row.id));
+}
+export function completeGallerySync(checkedAt: number, scope: string, signal: AbortSignal, options: { scanId?: string; ids?: string[] } = {}) {
+  return access.run((db) => db.withTransactionAsync(async () => {
+    if (signal.aborted) throw new Error('Gallery sync cancelled.');
+    if (options.scanId) await db.runAsync(FINISH_GALLERY_SCAN_SQL, options.scanId);
+    if (options.ids) await db.runAsync(RECONCILE_GALLERY_IDS_SQL, JSON.stringify(options.ids));
+    await db.runAsync(SAVE_GALLERY_SYNC_SQL, checkedAt, scope);
+    if (signal.aborted) throw new Error('Gallery sync cancelled.');
+  }));
+}
+export function removeGalleryIds(ids: string[], signal: AbortSignal) {
+  if (!ids.length) return Promise.resolve();
+  return access.run((db) => {
+    if (signal.aborted) throw new Error('Gallery sync cancelled.');
+    return db.runAsync(DELETE_GALLERY_IDS_SQL, JSON.stringify(ids));
+  });
 }
 export function readGalleryPage(offset = 0) {
   return access.run(async (db) => {

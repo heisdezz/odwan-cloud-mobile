@@ -4,7 +4,7 @@ import { mediaName } from './media';
 
 export type ViewerItem = {
   id: string; name: string; video: boolean; available: boolean;
-  width: number; height: number;
+  width: number; height: number; createdAt?: number | string;
 } & ({ kind: 'remote'; record: MediaItemResponse } | { kind: 'local'; uri: string });
 export type ViewerScope = { serverUrl: string; accountId: string; revision: number };
 export type ViewerSession = {
@@ -24,11 +24,11 @@ export function remoteViewerItem(record: MediaItemResponse): ViewerItem {
   return { kind: 'remote', record, id: record.id, name: mediaName(record),
     video: record.mime_type.startsWith('video/'),
     available: record.upload_status === 'success' && !!record.storage_backend && !!record.storage_bucket && !!record.storage_key,
-    width, height };
+    width, height, createdAt: record.created_at };
 }
 export function localViewerItem(asset: LocalAsset): ViewerItem {
   return { kind: 'local', id: asset.id, uri: asset.uri, name: asset.filename,
-    video: asset.mediaType === 'video', available: true, width: asset.width, height: asset.height };
+    video: asset.mediaType === 'video', available: true, width: asset.width, height: asset.height, createdAt: asset.createdAt };
 }
 export function appendViewerItems(current: ViewerItem[], incoming: ViewerItem[]): ViewerItem[] {
   const ids = new Set(current.map((item) => item.id));

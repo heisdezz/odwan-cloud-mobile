@@ -26,6 +26,9 @@ export const READ_GALLERY_SQL = `SELECT a.id, a.modified_at AS modifiedAt, a.fil
   FROM local_assets a JOIN gallery_index g ON a.id=g.asset_id AND a.modified_at=g.modified_at
   ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
 export const FINISH_GALLERY_SCAN_SQL = 'DELETE FROM gallery_index WHERE scan_id != ?';
+export const RECONCILE_GALLERY_IDS_SQL = 'DELETE FROM gallery_index WHERE asset_id NOT IN (SELECT value FROM json_each(?))';
+export const DELETE_GALLERY_IDS_SQL = 'DELETE FROM gallery_index WHERE asset_id IN (SELECT value FROM json_each(?))';
+export const SAVE_GALLERY_SYNC_SQL = 'INSERT INTO gallery_sync_state (id, checked_at, access_scope) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at, access_scope=excluded.access_scope';
 export const READ_FULL_GALLERY_SQL = READ_GALLERY_SQL.replace(' LIMIT ? OFFSET ?', '');
 export const READ_GALLERY_BACKUPS_SQL = `SELECT s.asset_id, s.status FROM backup_status s
   JOIN gallery_index g ON g.asset_id=s.asset_id AND g.modified_at=s.modified_at

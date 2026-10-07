@@ -44,6 +44,15 @@ CREATE INDEX IF NOT EXISTS local_assets_gallery_order ON local_assets(created_at
 PRAGMA user_version = 2;
 `;
 
+export const GALLERY_SYNC_MIGRATION = `
+CREATE TABLE IF NOT EXISTS gallery_sync_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  checked_at INTEGER NOT NULL,
+  access_scope TEXT NOT NULL
+);
+PRAGMA user_version = 3;
+`;
+
 export type LocalAsset = {
   id: string; modifiedAt: number; filename: string; uri: string;
   mediaType: string; width: number; height: number; createdAt: number;

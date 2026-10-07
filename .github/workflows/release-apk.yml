@@ -1,0 +1,113 @@
+name: Android release APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CI: '1'
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+      - name: Cache Bun downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-1.4.0-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-1.4.0-
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Check app
+        run: |
+          bun run lint
+          bun run typecheck
+          bun test tests
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          # Override v3's obsolete default: 'tools platform-tools'.
+          packages: platform-tools
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006'
+      - name: Generate Android project
+        run: bunx expo prebuild --platform android --clean --no-install
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: enhanced
+          cache-read-only: false
+      - name: Restore generated debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/odwan-signing
+          key: odwan-debug-signing-v1
+      - name: Generate debug signing key if needed
+        env:
+          SIGNING_DIR: ${{ runner.temp }}/odwan-signing
+        run: |
+          mkdir -p "$SIGNING_DIR"
+          if [[ ! -f "$SIGNING_DIR/debug.keystore" ]]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$SIGNING_DIR/debug.keystore" -storetype JKS \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname 'CN=Android Debug,O=Android,C=US'
+          fi
+          keytool -list -keystore "$SIGNING_DIR/debug.keystore" \
+            -storepass android -alias androiddebugkey
+      - name: Build ARM64 release APK
+        working-directory: android
+        env:
+          SIGNING_KEYSTORE: ${{ runner.temp }}/odwan-signing/debug.keystore
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            "-Pandroid.injected.signing.store.file=$SIGNING_KEYSTORE" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android \
+            '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError' \
+            --max-workers=2 --build-cache --stacktrace
+      - name: Verify release APK
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")
+          grep -Fx "native-code: 'arm64-v8a'" <<< "$badging"
+          if grep -q '^application-debuggable' <<< "$badging"; then
+            echo '::error::Release APK must not be debuggable.'
+            exit 1
+          fi
+          test -s android/app/build/outputs/mapping/release/mapping.txt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: odwan-release-arm64-${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

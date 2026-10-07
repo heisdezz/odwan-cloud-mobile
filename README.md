@@ -104,7 +104,7 @@ These are reusable components and comparison examples; they do not add uploads o
 
 ## Grid zoom and video previews
 
-Photos and Gallery both support 1–6 columns. Pinch inward to show more columns, spread outward for larger tiles, or use Zoom in/Zoom out. Density changes once at the end of a pinch, so scrolling does not repeatedly trigger masonry layout updates. FlashList keeps its mounted list and visible-content positioning as columns change.
+Photos and Gallery both support 2–6 columns using pinch gestures. Pinch inward to show more columns; spread outward for larger tiles. Density changes once at the end of a pinch, so scrolling does not repeatedly trigger masonry layout updates. FlashList keeps its mounted list and visible-content positioning as columns change.
 
 Native video previews use the existing `expo-video` dependency. Only cell renders request previews; measurement renders do not decode videos. At most two decoders run concurrently. Leaving a cell cancels queued or active work, and each request has a 20-second deadline. Frames are capped at 320×320 and cached in React Query for reuse, with unused queries collected after 30 seconds. Sources do not play or use persistent video caching. Failed previews expose a retry action.
 

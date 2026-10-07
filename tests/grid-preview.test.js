@@ -6,7 +6,7 @@ test('pinches change density in the expected direction and stay within usable li
   expect(columnsAfterPinch(3, 1.3)).toBe(2);
   expect(columnsAfterPinch(3, 1 / 1.3)).toBe(4);
   expect(columnsAfterPinch(3, 1.02)).toBe(3);
-  expect(columnsAfterPinch(1, 10)).toBe(1);
+  expect(columnsAfterPinch(2, 10)).toBe(2);
   expect(columnsAfterPinch(6, 0.1)).toBe(6);
   expect(columnsAfterPinch(3, 0)).toBe(3);
   expect(columnsAfterPinch(3, NaN)).toBe(3);

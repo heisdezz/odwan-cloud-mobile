@@ -27,7 +27,8 @@ async function saveImage(image: Exclude<Parameters<typeof ImageManipulator.manip
     const destination = fileFor(key);
     // Publish only a complete JPEG. A previous zero-byte/failed write is never treated as a hit.
     if (destination.exists) destination.delete();
-    temporary.move(destination);
+    // SDK 57 moves asynchronously: keep the source alive until publishing finishes.
+    await temporary.move(destination);
     return destination.uri;
   } finally {
     if (temporary?.exists && temporary.uri !== fileFor(key).uri) temporary.delete();

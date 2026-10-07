@@ -24,6 +24,6 @@ export function GridZoom<T>(props: GridZoomProps<T>) {
   const { width } = useWindowDimensions();
   const [initialColumns] = useState(() => clampColumns(Math.floor(width / 150)));
   const colors = useTheme();
-  return <ZoomGrid<T> {...props} invert={false} zoomLevels={ZOOM_LEVELS} initialNumColumns={initialColumns}
+  return <ZoomGrid<T> {...props} invert={false} recycleItems={true} zoomLevels={ZOOM_LEVELS} initialNumColumns={initialColumns}
     gridStyle={tw.style('flex-1', { backgroundColor: colors.background })} />;
 }

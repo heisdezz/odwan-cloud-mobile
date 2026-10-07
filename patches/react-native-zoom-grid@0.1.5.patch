@@ -1,9 +1,3 @@
-diff --git a/node_modules/react-native-zoom-grid/.bun-tag-61279e5818dcb73e b/.bun-tag-61279e5818dcb73e
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/react-native-zoom-grid/.bun-tag-81bcfa6984cc7c46 b/.bun-tag-81bcfa6984cc7c46
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/lib/commonjs/ZoomGridList.js b/lib/commonjs/ZoomGridList.js
 index 4b60258fa9e71831ebc890d06d20a6109b3cde14..f02516cd8bef489e802af71be09678e83cda2413 100644
 --- a/lib/commonjs/ZoomGridList.js
@@ -209,12 +203,13 @@ index 1eccef44e4f1e185042a096dc34699a7dc14e841..6f7d0de4ecc59c282f2ef7f3e247ac95
          top: 0,
          left: 0,
 diff --git a/src/ZoomGridList.tsx b/src/ZoomGridList.tsx
-index 07984a0769c6b3a83533d602ee4cbd6d4ed2a0cc..4fe623569a1b3622c7c0c9c284771ab31134bda0 100644
+index 07984a0769c6b3a83533d602ee4cbd6d4ed2a0cc..e136a6024fe6eee09d90e2f3cd503a5991e81c2e 100644
 --- a/src/ZoomGridList.tsx
 +++ b/src/ZoomGridList.tsx
 @@ -1,14 +1,14 @@
- import React, { forwardRef } from 'react';
+-import React, { forwardRef } from 'react';
 -import { View, Dimensions } from 'react-native';
++import React, { forwardRef, useCallback } from 'react';
 +import { View, useWindowDimensions } from 'react-native';
  import Animated from 'react-native-reanimated';
 -import { LegendList, LegendListProps } from '@legendapp/list';
@@ -238,12 +233,23 @@ index 07984a0769c6b3a83533d602ee4cbd6d4ed2a0cc..4fe623569a1b3622c7c0c9c284771ab3
      isPinching,
      targetIndex,
      onScroll,
-@@ -32,6 +33,8 @@ export const ZoomGridList = forwardRef(({
+@@ -32,6 +33,11 @@ export const ZoomGridList = forwardRef(({
      extraData,
      ...rest
  }: ZoomGridListProps<any>, ref: any) => {
 +    const window = useWindowDimensions();
 +    const width = viewportWidth ?? window.width;
++    // All zoom-grid cells are square, including padding cells. Avoid estimated
++    // layout corrections when hidden density layers jump to the pinch anchor.
++    const getFixedItemSize = useCallback(() => width / numColumns, [width, numColumns]);
      return (
          <AnimatedLegendList
              ref={ref}
+@@ -40,6 +46,7 @@ export const ZoomGridList = forwardRef(({
+             numColumns={numColumns}
+             extraData={{ ...extraData, numColumns, targetIndex }}
+             estimatedItemSize={width / numColumns}
++            getFixedItemSize={getFixedItemSize}
+             onScroll={onScroll}
+             scrollEventThrottle={16}
+             renderItem={({ item, index }: { item: any, index: number }) => {

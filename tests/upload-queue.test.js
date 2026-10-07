@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUploadRepository } from '../src/db/upload-queue';
-import { UPLOAD_QUEUE_MIGRATION } from '../src/db/schema';
+import { UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION } from '../src/db/schema';
 import { createUploadWorker } from '../src/lib/upload-worker';
 import { resolveUploadAlbum, sendUpload } from '../src/lib/upload-api';
 import { UploadError } from '../src/lib/upload-types';
@@ -18,7 +18,7 @@ const result = { backend: 's3', bucket: 'photos', key: 'tests/confirmed/photo.jp
 const job = (id, other = {}) => ({ ...scope, id, asset: { id, modifiedAt: 100, filename: `${id}.jpg`, uri: `file:///${id}.jpg`, mediaType: 'image', width: 10, height: 20, createdAt: 50 },
   albumId: 'album', albumName: 'Camera', objectKey: `tests/${id}/${id}.jpg`, state: 'queued', result: null, error: null, createdAt: 500, ...other });
 const setup = () => {
-  const db = new Database(':memory:'); connections.push(db); db.exec(UPLOAD_QUEUE_MIGRATION);
+  const db = new Database(':memory:'); connections.push(db); db.exec(UPLOAD_QUEUE_MIGRATION); db.exec(UPLOAD_HISTORY_MIGRATION);
   const adapter = { runAsync: async (sql, ...params) => db.query(sql).run(...params), getAllAsync: async (sql, ...params) => db.query(sql).all(...params) };
   const repository = createUploadRepository((task) => task(adapter));
   return { db, repository };
@@ -180,7 +180,7 @@ test('queue survives closing and reopening its SQLite file', async () => {
     getAllAsync: async (sql, ...params) => db.query(sql).all(...params),
   }));
   try {
-    db.exec(UPLOAD_QUEUE_MIGRATION);
+    db.exec(UPLOAD_QUEUE_MIGRATION); db.exec(UPLOAD_HISTORY_MIGRATION);
     const original = openRepository();
     await original.enqueue([job('durable')]);
     await original.update('durable', 'organizing', result);
@@ -194,4 +194,37 @@ test('queue survives closing and reopening its SQLite file', async () => {
     expect(saved.asset).toEqual(job('durable').asset);
     expect(saved.result).toEqual(result);
   } finally { db.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('successful uploads are archived atomically and survive clearing the queue, scoped to each account', async () => {
+  const { repository, db } = setup();
+  await repository.enqueue([job('one'), job('two'), job('other', { accountId: 'other' })]);
+  await repository.update('one', 'success', result);
+  await repository.update('two', 'organizing', result);
+  await repository.update('other', 'success', result);
+  let history = await repository.history(scope);
+  expect(history.map((item) => item.id)).toEqual(['one']);
+  expect((await repository.current(scope)).map((item) => item.id)).toEqual(['two']);
+  expect(history[0].result).toEqual(result);
+  expect(history[0].completedAt).toBeGreaterThan(0);
+  await repository.clearCompleted(scope);
+  expect((await repository.list(scope)).map((item) => item.id)).toEqual(['two']);
+  expect((await repository.history(scope)).map((item) => item.id)).toEqual(['one']);
+  expect((await repository.history({ ...scope, accountId: 'other' })).map((item) => item.id)).toEqual(['other']);
+  db.exec(UPLOAD_HISTORY_MIGRATION);
+  expect(await repository.history(scope)).toHaveLength(1);
+});
+
+test('history migration adopts existing completed queue entries but never pending or failed ones', async () => {
+  const db = new Database(':memory:'); connections.push(db); db.exec(UPLOAD_QUEUE_MIGRATION);
+  const adapter = { runAsync: async (sql, ...params) => db.query(sql).run(...params), getAllAsync: async (sql, ...params) => db.query(sql).all(...params) };
+  const repository = createUploadRepository((task) => task(adapter));
+  await repository.enqueue([job('done'), job('failed')]);
+  await repository.update('done', 'success', result);
+  await repository.update('failed', 'error', result, 'Album assignment failed');
+  db.exec(UPLOAD_HISTORY_MIGRATION);
+  expect((await repository.history(scope)).map((item) => item.id)).toEqual(['done']);
+  await repository.clearCompleted(scope);
+  expect((await repository.history(scope))[0].result.media_id).toBe(result.media_id);
 });

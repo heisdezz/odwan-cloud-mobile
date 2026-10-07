@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -16,6 +16,7 @@ import { useAlbums, type AlbumWithCover } from '@/hooks/use-albums';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
+import { CreateAlbumSheet } from './CreateAlbumSheet';
 
 function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
   album: AlbumWithCover; serverUrl: string; accountId: string; previewEnabled: boolean;
@@ -48,6 +49,7 @@ export default function RemoteAlbums() {
   const colors = useTheme();
   const { verifiedUrl, account, revision } = useServerStore();
   const query = useAlbums();
+  const [creating, setCreating] = useState(false);
   const albums = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.items) ?? []).map((album) => [album.id, album])).values()], [query.data]);
   const retry = () => {
     if (query.isFetching) return;
@@ -55,6 +57,14 @@ export default function RemoteAlbums() {
     else void query.refetch();
   };
   return <View style={tw`flex-1`}>
+    {verifiedUrl && account && <View style={tw`px-6 pb-3 flex-row items-center gap-3 shrink-0`}>
+      <Text style={tw.style('flex-1 text-lg font-medium', { color: colors.text })}>Cloud albums</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create new cloud album" onPress={() => setCreating(true)}
+        style={({ pressed }) => tw.style('min-h-11 px-4 rounded-full flex-row items-center gap-2', { backgroundColor: colors.backgroundSelected, opacity: pressed ? 0.7 : 1 })}>
+        <SymbolView name={{ ios: 'plus', android: 'add', web: 'add' }} size={20} tintColor={colors.text} />
+        <Text style={tw.style('text-sm font-medium', { color: colors.text })}>New album</Text>
+      </Pressable>
+    </View>}
     {!verifiedUrl || !account ? <View style={tw`flex-1 justify-center px-6 gap-4 pb-24`}>
       <Text style={tw.style('text-xl font-medium text-center', { color: colors.text })}>Your albums</Text>
       <Text style={tw.style('text-base text-center', { color: colors.textSecondary })}>Connect to your server and log in to browse your albums.</Text>
@@ -81,5 +91,6 @@ export default function RemoteAlbums() {
           </View> : null}
       />}
     </PageLoader>}
+    {creating && verifiedUrl && account && <CreateAlbumSheet key={`${verifiedUrl}:${account.id}:${revision}`} onClose={() => setCreating(false)} />}
   </View>;
 }

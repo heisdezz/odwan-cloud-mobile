@@ -81,3 +81,17 @@ PRAGMA user_version = 4;
 export type BackupStatus = 'pending' | 'uploading' | 'backed_up' | 'error';
 export type BackupScope = { serverUrl: string; accountId: string };
 export const backupLabel = (status?: BackupStatus) => !status ? 'Not tracked' : ({ pending: 'Not backed up', uploading: 'Uploading', backed_up: 'Backed up', error: 'Backup failed' })[status];
+
+// A success transition archives its immutable snapshot in the same SQLite write.
+export const UPLOAD_HISTORY_MIGRATION = `
+CREATE TABLE IF NOT EXISTS upload_history AS SELECT upload_queue.*, CAST(0 AS INTEGER) AS completed_at FROM upload_queue WHERE 0;
+CREATE UNIQUE INDEX IF NOT EXISTS upload_history_id ON upload_history(id);
+CREATE INDEX IF NOT EXISTS upload_history_scope ON upload_history(server_url,account_id,completed_at DESC);
+INSERT OR IGNORE INTO upload_history SELECT upload_queue.*,created_at FROM upload_queue WHERE state='success' AND result_json IS NOT NULL;
+CREATE TRIGGER IF NOT EXISTS archive_completed_upload AFTER UPDATE OF state ON upload_queue
+WHEN NEW.state='success' AND NEW.result_json IS NOT NULL
+BEGIN
+  INSERT OR IGNORE INTO upload_history SELECT upload_queue.*,CAST(strftime('%s','now') AS INTEGER)*1000 FROM upload_queue WHERE id=NEW.id;
+END;
+PRAGMA user_version = 5;
+`;

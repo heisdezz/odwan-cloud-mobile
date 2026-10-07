@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import PocketBase, { BaseAuthStore } from 'pocketbase';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +37,8 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
   const insets = useSafeAreaInsets();
   const { verifiedUrl, account, revision } = useServerStore();
   const queue = useUploadQueue();
+  const cache = useQueryClient();
+  const [newAlbumName, setNewAlbumName] = useState('');
   const [destination, setDestination] = useState(albumName.trim() ? 'match' : 'unsorted');
   const [tokenInput, setTokenInput] = useState<string | null>(null);
   const tokenQuery = useQuery({ queryKey: ['upload-token', verifiedUrl], enabled: !!verifiedUrl,
@@ -58,10 +60,12 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
       const api = new PocketBase(verifiedUrl, new BaseAuthStore());
       api.authStore.save(pb.authStore.token, pb.authStore.record);
       const chosen = destination === 'match' ? matching ?? await resolveUploadAlbum(api, albumName)
+        : destination === 'new' ? await resolveUploadAlbum(api, newAlbumName)
         : destination === 'unsorted' ? { id: 'unsorted', name: 'Unsorted' }
         : albums.data?.find((album) => album.id === destination);
       if (!chosen) throw new Error('Choose an available cloud album.');
       if (useServerStore.getState().revision !== revision) throw new Error('The server changed. Choose the destination again.');
+      void cache.invalidateQueries({ queryKey: ['albums', verifiedUrl, account.id] });
       await queue.enqueue(assets, chosen, token);
     },
     onSuccess: () => { toast.success(`${assets.length} ${assets.length === 1 ? 'item added' : 'items added'} to upload queue`); onQueued(); },
@@ -83,6 +87,11 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
             helperText="Use test_token from your server configuration. Saved for this server." />
           {albumName.trim() && <DestinationRow name={`Use “${albumName}”`} detail={matching ? 'Add to the existing cloud album' : 'Create this cloud album if it does not exist'} selected={destination === 'match'} onPress={() => setDestination('match')} />}
           <DestinationRow name="Unsorted" detail="Upload without choosing a named album" selected={destination === 'unsorted'} onPress={() => setDestination('unsorted')} />
+          <DestinationRow name="New album" detail="Choose a name for these uploads" selected={destination === 'new'} onPress={() => setDestination('new')} />
+          {destination === 'new' && <View style={tw`px-4`}>
+            <Input label="New album name" value={newAlbumName} onChangeText={setNewAlbumName} placeholder="e.g. Summer trip"
+              helperText="If this name already exists, uploads will go to that album." />
+          </View>}
           <Text style={tw.style('px-4 pt-3 text-sm font-medium', { color: colors.textSecondary })}>Or choose a cloud album</Text>
           {albums.isFetching && <Text style={tw.style('px-4 text-sm', { color: colors.textSecondary })}>Loading albums…</Text>}
           {albums.isError && <View style={tw`gap-2 px-4`}><Text accessibilityRole="alert" style={tw.style('text-sm', { color: colors.error })}>{extract_message(albums.error)}</Text><Button label="Retry albums" variant="outlined" onPress={() => { void albums.refetch(); }} /></View>}
@@ -94,7 +103,7 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
         <Text style={tw.style('text-xs', { color: colors.textSecondary })}>Existing cloud copies will be moved to the selected album.</Text>
         {add.error && <Text accessibilityRole="alert" style={tw.style('text-sm', { color: colors.error })}>{extract_message(add.error)}</Text>}
         <Button label={`Queue ${assets.length} ${assets.length === 1 ? 'item' : 'items'}`} loading={add.isPending}
-          disabled={!token.trim() || !assets.length || !queue.ready} onPress={() => add.mutate()} />
+          disabled={!token.trim() || !assets.length || !queue.ready || (destination === 'new' && !newAlbumName.trim())} onPress={() => add.mutate()} />
         {!queue.ready && !queue.error && <Text style={tw.style('text-sm', { color: colors.textSecondary })}>Loading upload queue…</Text>}
         {!!queue.error && <View style={tw`gap-2`}><Text accessibilityRole="alert" style={tw.style('text-sm', { color: colors.error })}>{extract_message(queue.error)}</Text>
           <Button label="Retry queue" variant="outlined" onPress={() => { void queue.reload().catch((error) => toast.error(extract_message(error))); }} /></View>}

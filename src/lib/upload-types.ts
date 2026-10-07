@@ -10,6 +10,7 @@ export type UploadJob = BackupScope & {
   state: 'queued' | 'uploading' | 'organizing' | 'success' | 'error';
   result: UploadResult | null; error: string | null; createdAt: number;
 };
+export type UploadHistoryItem = UploadJob & { completedAt: number };
 export type UploadDestination = { id: string; name: string };
 export type UploadPhase = { id: string; phase: 'preparing' | 'sending' | 'organizing' } | null;
 export class UploadError extends Error {

@@ -3,6 +3,7 @@ import type { LocalAsset } from '@/db/schema';
 import type { UploadDestination, UploadJob, UploadPhase } from '@/lib/upload-types';
 
 export type UploadQueue = {
+  backgroundAvailable: boolean; backgroundError: string | null;
   jobs: UploadJob[]; phase: UploadPhase; paused: boolean; ready: boolean; error: unknown;
   enqueue: (assets: LocalAsset[], destination: UploadDestination, token: string) => Promise<void>;
   retry: () => Promise<void>; remove: (id: string) => Promise<void>; clearCompleted: () => Promise<void>;

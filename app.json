@@ -67,7 +67,8 @@
       ],
       "expo-video",
       "expo-sharing",
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/with-upload-service"
     ],
     "experiments": {
       "typedRoutes": true,

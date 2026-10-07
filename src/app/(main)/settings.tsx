@@ -1,8 +1,12 @@
-import { clearServerQueries } from '@/lib/server-query-cache';
-import { logoutServerSession, restoreServerSession } from '@/lib/server-session';
+import { clearServerQueries } from "@/lib/server-query-cache";
+import {
+  logoutServerSession,
+  restoreServerSession,
+} from "@/lib/server-session";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { SymbolView } from "expo-symbols";
 import { router } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
 import { Button, Input } from "@/components/ui";
@@ -33,7 +37,9 @@ export default function SettingsScreen() {
         toast.success(`Connected to server (${milliseconds} ms)`);
         void restoreServerSession(url, revision).catch(() => {
           if (useServerStore.getState().revision === revision)
-            toast.error("Connected, but saved login could not be restored. Please log in again.");
+            toast.error(
+              "Connected, but saved login could not be restored. Please log in again.",
+            );
         });
       }
     },
@@ -62,6 +68,61 @@ export default function SettingsScreen() {
         >
           Settings
         </Text>
+        <View style={tw`gap-2`}>
+          <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
+            Uploads
+          </Text>
+          {(
+            [
+              {
+                title: "Current uploads",
+                detail: "Manage pending uploads, pause, or retry",
+                href: "/uploads/current",
+              },
+              {
+                title: "Uploaded",
+                detail: "Completed uploads saved in history",
+                href: "/uploads/history",
+              },
+            ] as const
+          ).map((entry) => (
+            <Pressable
+              key={entry.href}
+              accessibilityRole="button"
+              accessibilityLabel={entry.title}
+              onPress={() => router.push(entry.href)}
+              style={({ pressed }) =>
+                tw.style("min-h-16 py-3 flex-row items-center gap-3", {
+                  opacity: pressed ? 0.7 : 1,
+                })
+              }
+            >
+              <View style={tw`flex-1 gap-1`}>
+                <Text
+                  style={tw.style("text-base font-medium", {
+                    color: colors.text,
+                  })}
+                >
+                  {entry.title}
+                </Text>
+                <Text
+                  style={tw.style("text-sm", { color: colors.textSecondary })}
+                >
+                  {entry.detail}
+                </Text>
+              </View>
+              <SymbolView
+                name={{
+                  ios: "chevron.right",
+                  android: "chevron_right",
+                  web: "chevron_right",
+                }}
+                size={20}
+                tintColor={colors.textSecondary}
+              />
+            </Pressable>
+          ))}
+        </View>
         <View style={tw`gap-3`}>
           <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
             Server connection
@@ -119,7 +180,12 @@ export default function SettingsScreen() {
               <Button label="Log in" onPress={() => router.push("/auth")} />
             )}
             {logout.isError && !server.account && (
-              <Button label="Remove saved login" variant="outlined" loading={logout.isPending} onPress={() => logout.mutate()} />
+              <Button
+                label="Remove saved login"
+                variant="outlined"
+                loading={logout.isPending}
+                onPress={() => logout.mutate()}
+              />
             )}
           </View>
         )}

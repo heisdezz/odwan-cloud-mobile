@@ -2,7 +2,7 @@ import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, REA
 import { writeGalleryBatch } from './gallery-index';
 import { createDatabaseAccess } from './database-access';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
-import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, GALLERY_SYNC_MIGRATION, UPLOAD_QUEUE_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
+import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, GALLERY_SYNC_MIGRATION, UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
 
 // Keep the connection/queue through Fast Refresh; a second JS module must not race it.
 type DatabaseAccess = ReturnType<typeof createDatabaseAccess<SQLiteDatabase>>;
@@ -12,13 +12,14 @@ const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
   initialize: async (db) => {
     await db.execAsync('PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;');
     const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if ((version?.user_version ?? 0) > 4) throw new Error('Local database is newer than this app. Update the app.');
+    if ((version?.user_version ?? 0) > 5) throw new Error('Local database is newer than this app. Update the app.');
     const journal = await db.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode');
     if (journal?.journal_mode.toLowerCase() !== 'wal') await db.execAsync('PRAGMA journal_mode = WAL;');
     if ((version?.user_version ?? 0) < 1) await db.withTransactionAsync(() => db.execAsync(LOCAL_STORE_TABLES));
     if ((version?.user_version ?? 0) < 2) await db.withTransactionAsync(() => db.execAsync(GALLERY_INDEX_MIGRATION));
     if ((version?.user_version ?? 0) < 3) await db.withTransactionAsync(() => db.execAsync(GALLERY_SYNC_MIGRATION));
     if ((version?.user_version ?? 0) < 4) await db.withTransactionAsync(() => db.execAsync(UPLOAD_QUEUE_MIGRATION));
+    if ((version?.user_version ?? 0) < 5) await db.withTransactionAsync(() => db.execAsync(UPLOAD_HISTORY_MIGRATION));
   },
   close: (db) => db.closeAsync(),
 });

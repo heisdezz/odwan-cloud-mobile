@@ -1,5 +1,5 @@
 import type { BackupScope } from './schema';
-import type { UploadJob, UploadResult } from '@/lib/upload-types';
+import type { UploadHistoryItem, UploadJob, UploadResult } from '@/lib/upload-types';
 
 type Database = {
   runAsync: (sql: string, ...params: (string | number | null)[]) => Promise<unknown>;
@@ -27,6 +27,18 @@ export function createUploadRepository(run: <T>(task: (db: Database) => Promise<
     async list(scope: BackupScope): Promise<UploadJob[]> {
       const rows = await run((db) => db.getAllAsync<Row>(`${SELECT} WHERE server_url=? AND account_id=? ORDER BY rowid`, scope.serverUrl, scope.accountId));
       return rows.map(decode);
+    },
+    async hasPending(scope: BackupScope) {
+      const rows = await run((db) => db.getAllAsync<{ id: string }>("SELECT id FROM upload_queue WHERE server_url=? AND account_id=? AND state='queued' LIMIT 1", scope.serverUrl, scope.accountId));
+      return rows.length > 0;
+    },
+    async current(scope: BackupScope): Promise<UploadJob[]> {
+      const rows = await run((db) => db.getAllAsync<Row>(`${SELECT} WHERE server_url=? AND account_id=? AND state!='success' ORDER BY rowid`, scope.serverUrl, scope.accountId));
+      return rows.map(decode);
+    },
+    async history(scope: BackupScope, limit = 100, offset = 0): Promise<UploadHistoryItem[]> {
+      const rows = await run((db) => db.getAllAsync<Row & { completedAt: number }>(`SELECT ${COLUMNS},completed_at AS completedAt FROM upload_history WHERE server_url=? AND account_id=? ORDER BY completed_at DESC,rowid DESC LIMIT ? OFFSET ?`, scope.serverUrl, scope.accountId, limit, offset));
+      return rows.map((row) => ({ ...decode(row), completedAt: row.completedAt }));
     },
     async claim(scope: BackupScope): Promise<UploadJob | null> {
       const rows = await run((db) => db.getAllAsync<Row>(`UPDATE upload_queue

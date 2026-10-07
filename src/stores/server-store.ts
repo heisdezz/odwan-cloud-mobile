@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { preferencesStorage } from '@/lib/preferences-storage';
 import { pb } from '@/client/pb';
 
 type ServerState = {
@@ -13,7 +15,8 @@ type ServerState = {
   logout: () => void;
 };
 
-export const useServerStore = create<ServerState>((set, get) => ({
+export function createServerStore(storage: StateStorage) {
+  return create<ServerState>()(persist((set, get) => ({
   urlInput: '', verifiedUrl: null, revision: 0, account: null,
   setUrlInput: (urlInput) => {
     if (urlInput === get().urlInput) return;
@@ -35,4 +38,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
   },
   setAccount: (account) => set({ account }),
   logout: () => { pb.authStore.clear(); set({ account: null }); },
-}));
+  }), {
+    name: 'odwan-server-preferences',
+    storage: createJSONStorage(() => storage),
+    partialize: ({ urlInput }) => ({ urlInput }),
+    merge: (persisted, current) => {
+      const urlInput = (persisted as { urlInput?: unknown } | undefined)?.urlInput;
+      return { ...current, urlInput: typeof urlInput === 'string' ? urlInput : '' };
+    },
+  }));
+}
+
+export const useServerStore = createServerStore(preferencesStorage);

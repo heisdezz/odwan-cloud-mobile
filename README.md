@@ -73,7 +73,7 @@ Settings accepts an HTTP(S) base URL and checks `GET /api/test/connection`. The 
 
 React Query owns request state and the root query provider tracks native app focus. Zustand holds the URL, verified connection, and account metadata. sonner-native displays feedback throughout the app. Editing the URL or retesting clears verification and authentication; responses from older checks or logins cannot change the current session. Logout clears the PocketBase auth store and query cache.
 
-Server configuration and authentication are in memory for the current session; passwords and tokens are not written to device storage. Use the server's LAN address when connecting from a physical phone. Connection and authentication tests run with `bun test tests/server-connection.test.js` and use mock responses, not live credentials.
+The server URL is saved in local preferences and restored on the next launch. Connection verification and authentication stay in memory; test the saved URL and log in again after restarting. Passwords and tokens are not written to device storage. Use the server's LAN address when connecting from a physical phone. Connection and authentication tests run with `bun test tests/server-connection.test.js` and use mock responses, not live credentials.
 
 ## Photos library
 

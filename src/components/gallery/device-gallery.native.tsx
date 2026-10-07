@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlashList, useRecyclingState } from '@shopify/flash-list';
 import { Image } from 'expo-image';
+import { useMediaViewer } from '@/providers/media-viewer-provider';
+import { localViewerItem } from '@/helpers/media-viewer';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { VideoThumbnail } from '@/components/media/video-thumbnail';
 import { addListener, presentPermissionsPicker, usePermissions, loadDeviceMedia, type GalleryCursor } from '@/lib/device-media.native';
-import { ActivityIndicator, AppState, Linking, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 import PageLoader from '@/components/layouts/PageLoader';
 import { Button } from '@/components/ui';
@@ -18,10 +20,10 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
 
-function GalleryTile({ asset, status, previewEnabled }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean }) {
+function GalleryTile({ asset, status, previewEnabled, onPress }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void }) {
   const colors = useTheme();
   const [failed, setFailed] = useRecyclingState(false, [asset.id, asset.modifiedAt]);
-  return <View accessible={asset.mediaType !== 'video'} accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
+  return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     aspectRatio: asset.width > 0 && asset.height > 0 ? Math.max(0.5, Math.min(2, asset.width / asset.height)) : 1,
     backgroundColor: colors.backgroundElement,
   })}>
@@ -33,7 +35,7 @@ function GalleryTile({ asset, status, previewEnabled }: { asset: LocalAsset; sta
     <View style={tw`absolute bottom-1 left-1 right-1 rounded px-1 py-1 bg-black/70`}>
       <Text style={tw`text-white text-xs`} numberOfLines={1}>{backupLabel(status)}</Text>
     </View>
-  </View>;
+  </Pressable>;
 }
 
 function GalleryContent() {
@@ -56,6 +58,16 @@ function GalleryContent() {
     getNextPageParam: (page) => page.next,
   });
   const assets = useMemo(() => [...new Map((gallery.data?.pages.flatMap((page) => page.assets) ?? []).map((asset) => [asset.id, asset])).values()], [gallery.data]);
+  const viewer = useMediaViewer();
+  const assetsRef = useRef(assets);
+  useEffect(() => { assetsRef.current = assets; }, [assets]);
+  const open = (id: string) => viewer.open({ items: assetsRef.current.map(localViewerItem), selectedId: id,
+    loadMore: async () => {
+      if (!gallery.hasNextPage) return undefined;
+      const result = await gallery.fetchNextPage();
+      if (result.isError) throw result.error;
+      return result.data?.pages.flatMap((page) => page.assets).map(localViewerItem);
+    } });
   const statuses = useQuery({
     queryKey: ['backup-status', verifiedUrl, account?.id, assets.map((asset) => [asset.id, asset.modifiedAt])],
     queryFn: () => readBackupStatuses(assets, verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
@@ -92,7 +104,7 @@ function GalleryContent() {
     <PageLoader query={gallery}>
       {() => <GridZoom>{(columns) => <FlashList data={assets} masonry numColumns={columns} optimizeItemArrangement={false}
         extraData={statuses.data} keyExtractor={(asset) => asset.id}
-        renderItem={({ item, target }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={target === 'Cell'} />}
+        renderItem={({ item, target }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={target === 'Cell'} onPress={open} />}
         contentContainerStyle={tw.style('px-0.5', { paddingBottom: BottomTabInset + 24 })}
         refreshing={gallery.isRefetching && !gallery.isFetchingNextPage}
         onRefresh={() => { void getPermission(); setGeneration((value) => value + 1); void queryClient.invalidateQueries({ queryKey: ['backup-status'] }); }}

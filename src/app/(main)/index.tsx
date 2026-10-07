@@ -34,6 +34,12 @@ export default function HomeScreen() {
           if (query.isFetchNextPageError || query.hasNextPage) void query.fetchNextPage();
           else if (query.isRefetchError) void query.refetch();
         }}
+        loadViewerPage={async () => {
+          if (!query.hasNextPage) return undefined;
+          const result = await query.fetchNextPage();
+          if (result.isError) throw result.error;
+          return result.data?.pages.flatMap((page) => page.items);
+        }}
         loadingMore={query.isFetchingNextPage} error={query.error}
       />}
     </PageLoader>}

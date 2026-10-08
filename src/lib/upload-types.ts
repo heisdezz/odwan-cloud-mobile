@@ -16,3 +16,6 @@ export type UploadPhase = { id: string; phase: 'preparing' | 'sending' | 'organi
 export class UploadError extends Error {
   constructor(message: string, public status = 0) { super(message); }
 }
+export class UploadConnectionError extends Error {
+  constructor() { super('Connection to the server was lost. The upload will retry automatically.'); }
+}

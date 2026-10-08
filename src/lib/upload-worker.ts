@@ -1,7 +1,7 @@
 import { extract_message } from '@/helpers/api';
 import type { BackupScope } from '@/db/schema';
 import type { UploadRepository } from '@/db/upload-queue';
-import { UploadError, type UploadJob, type UploadResult } from './upload-types';
+import { UploadConnectionError, UploadError, type UploadJob, type UploadResult } from './upload-types';
 
 /** One worker survives repeated wakeups; confirmed bytes are never resent for an album retry. */
 export function createUploadWorker(options: {
@@ -12,6 +12,8 @@ export function createUploadWorker(options: {
   confirm: (job: UploadJob, result: UploadResult) => Promise<void>;
   status?: (job: UploadJob, state: 'pending' | 'uploading' | 'error', error?: string) => Promise<void>;
   changed: () => void;
+  connectionLost?: (job: UploadJob) => void;
+  completed?: (job: UploadJob) => void;
 }) {
   let running: Promise<void> | null = null;
   let controller: AbortController | null = null;
@@ -49,8 +51,15 @@ export function createUploadWorker(options: {
         await options.organize(job, result, signal);
         if (!current()) { await options.repository.update(job.id, 'queued'); await options.status?.(job, 'pending'); return; }
         await options.repository.update(job.id, 'success', result);
+        options.completed?.(job);
       } catch (error) {
         if (!current()) { await options.repository.update(job.id, 'queued'); await options.status?.(job, 'pending'); }
+        else if (error instanceof UploadConnectionError) {
+          await options.repository.update(job.id, 'queued');
+          await options.status?.(job, 'pending');
+          blocked = true;
+          options.connectionLost?.(job);
+        }
         else {
           await options.repository.update(job.id, 'error', undefined, extract_message(error));
           await options.status?.(job, 'error', extract_message(error));

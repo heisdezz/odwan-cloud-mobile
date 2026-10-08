@@ -22,7 +22,6 @@ export function normalizeServerUrl(input: string): string {
 
 export async function testServerConnection(input: string): Promise<string> {
   const url = normalizeServerUrl(input);
-  console.log(url);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {

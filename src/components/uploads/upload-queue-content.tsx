@@ -39,7 +39,7 @@ function QueueContent({ onClose }: { onClose?: () => void }) {
   return <View style={tw`flex-1`}>
     <View style={tw`px-6 pt-5 pb-3 flex-row items-start gap-3`}>
       <View style={tw`flex-1 gap-1`}><Text accessibilityRole="header" style={tw.style('text-2xl font-semibold', { color: colors.text })}>Upload queue</Text>
-        <Text accessibilityLiveRegion="polite" style={tw.style('text-sm', { color: colors.textSecondary })}>{jobs.length} {jobs.length === 1 ? 'item' : 'items'}{failed ? ` · ${failed} failed` : ''}{queue.paused ? ' · Paused' : ''}</Text></View>
+        <Text accessibilityLiveRegion="polite" style={tw.style('text-sm', { color: colors.textSecondary })}>{jobs.length} {jobs.length === 1 ? 'item' : 'items'}{failed ? ` · ${failed} failed` : ''}{queue.paused ? ' · Paused' : queue.waitingForConnection ? ' · Waiting for server' : ''}</Text></View>
       {onClose && <Button label="Close" variant="text" onPress={onClose} style={tw`w-20`} />}
     </View>
     <FlatList style={tw`flex-1`} data={jobs} keyExtractor={(job) => job.id} contentContainerStyle={tw`px-6 pb-4`}

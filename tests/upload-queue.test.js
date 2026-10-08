@@ -7,7 +7,7 @@ import { createUploadRepository } from '../src/db/upload-queue';
 import { UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION } from '../src/db/schema';
 import { createUploadWorker } from '../src/lib/upload-worker';
 import { resolveUploadAlbum, sendUpload } from '../src/lib/upload-api';
-import { UploadError } from '../src/lib/upload-types';
+import { UploadConnectionError, UploadError } from '../src/lib/upload-types';
 import PocketBase, { BaseAuthStore } from 'pocketbase';
 
 const connections = [];
@@ -141,6 +141,28 @@ test('a rejected upload token fails one item and leaves the rest queued for retr
   await worker(repository, { upload: async () => { calls++; throw new UploadError('Upload token rejected', 401); } }).wake();
   expect(calls).toBe(1);
   expect((await repository.list(scope)).map((item) => item.state)).toEqual(['error', 'queued']);
+});
+
+test('lost connection leaves the active item queued and resumes with its original key', async () => {
+  const { repository } = setup(); await repository.enqueue([job('one'), job('two')]);
+  let calls = 0, losses = 0;
+  const queue = worker(repository, {
+    upload: async () => { calls++; if (calls === 1) throw new UploadConnectionError(); return result; },
+    connectionLost: () => { losses++; },
+  });
+  await queue.wake();
+  expect(calls).toBe(1);
+  expect(losses).toBe(1);
+  expect((await repository.list(scope)).map((item) => item.state)).toEqual(['queued', 'queued']);
+  expect((await repository.list(scope))[0].objectKey).toBe(job('one').objectKey);
+  await queue.wake();
+  expect((await repository.list(scope)).map((item) => item.state)).toEqual(['success', 'success']);
+});
+
+test('request transport errors are retryable while HTTP errors remain explicit', async () => {
+  const options = { ...scope, testToken: 'test', objectKey: job('one').objectKey, body: new FormData(), signal: new AbortController().signal };
+  await expect(sendUpload(options, async () => { throw new TypeError('Network request failed'); })).rejects.toBeInstanceOf(UploadConnectionError);
+  await expect(sendUpload(options, async () => Response.json({ error: 'Denied' }, { status: 401 }))).rejects.toBeInstanceOf(UploadError);
 });
 
 test('multipart upload sends only the test credential, preserves base paths, and trusts confirmed duplicate ids', async () => {

@@ -14,8 +14,10 @@ import { UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION, type LocalAsset, type
 import { createUploadWorker } from '@/lib/upload-worker';
 import { uploadDeviceFile } from '@/lib/upload-file.native';
 import { readUploadToken, saveUploadToken } from '@/lib/upload-token';
-import { UploadError, type UploadDestination, type UploadJob, type UploadPhase } from '@/lib/upload-types';
+import { testServerConnection } from '@/lib/server-connection';
+import { UploadConnectionError, UploadError, type UploadDestination, type UploadJob, type UploadPhase } from '@/lib/upload-types';
 import { useServerStore } from '@/stores/server-store';
+import { uploadScopeKey, useUploadPreferences } from '@/stores/upload-preferences-store';
 import { UploadQueueContext } from './upload-queue-context';
 
 // Recover interrupted entries once per JS runtime, rather than on every mount/focus.
@@ -25,10 +27,16 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
   const client = useQueryClient();
   const { verifiedUrl, account, revision } = useServerStore();
   const [active, setActive] = useState(AppState.currentState === 'active');
-  const [paused, setPaused] = useState(false);
   const [phase, setPhase] = useState<UploadPhase>(null);
   const [backgroundError, setBackgroundError] = useState<string | null>(null);
+  const [retryState, setRetryState] = useState({ scopeKey: null as string | null, attempt: 0, waiting: false });
   const scope = useMemo(() => verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null, [verifiedUrl, account]);
+  const scopeKey = scope ? uploadScopeKey(scope) : null;
+  const retryAttempt = retryState.scopeKey === scopeKey ? retryState.attempt : 0;
+  const waitingForConnection = retryState.scopeKey === scopeKey && retryState.waiting;
+  const paused = useUploadPreferences((state) => scope ? !!state.pausedByScope[uploadScopeKey(scope)] : false);
+  const savePaused = useUploadPreferences((state) => state.setPaused);
+  const setPaused = useCallback((value: boolean) => { if (scope) savePaused(scope, value); }, [scope, savePaused]);
   const [runtime] = useState(() => createStore<{ scope: BackupScope | null }>(() => ({ scope: null })));
   useEffect(() => { runtime.setState({ scope: !paused ? scope : null }); }, [scope, paused, runtime]);
   const query = useQuery({ queryKey: ['upload-queue', verifiedUrl, account?.id], enabled: !!scope,
@@ -65,7 +73,13 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
         throw new UploadError('Log in again to finish organizing this upload.', 401);
       const api = new PocketBase(job.serverUrl, new BaseAuthStore());
       api.authStore.save(pb.authStore.token, pb.authStore.record);
-      await api.collection('media_item').update(result.media_id, { album_id: job.albumId }, { signal, requestKey: null });
+      try {
+        await api.collection('media_item').update(result.media_id, { album_id: job.albumId }, { signal, requestKey: null });
+      } catch (error) {
+        if (!signal.aborted && error && typeof error === 'object' && 'status' in error && error.status === 0)
+          throw new UploadConnectionError();
+        throw error;
+      }
       void client.invalidateQueries({ queryKey: ['albums', job.serverUrl, job.accountId] });
       void client.invalidateQueries({ queryKey: ['media-items', job.serverUrl, job.accountId] });
     },
@@ -77,6 +91,14 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
       if (previous[job.asset.id] !== 'backed_up') await recordBackupStatus(job.asset, job, state, undefined, error);
     },
     changed: () => { setPhase(null); changed(); },
+    connectionLost: (job) => {
+      const key = uploadScopeKey(job);
+      setRetryState((state) => ({ scopeKey: key, attempt: state.scopeKey === key ? state.attempt + 1 : 1, waiting: true }));
+    },
+    completed: (job) => {
+      const key = uploadScopeKey(job);
+      setRetryState((state) => state.scopeKey === key ? { scopeKey: key, attempt: 0, waiting: false } : state);
+    },
   }));
   const [runner] = useState(() => createUploadRunner({ worker,
     // Stop before Android 15's six-hour dataSync service limit.
@@ -96,9 +118,24 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
   }, []);
   useEffect(() => { runner.stop(); return () => runner.stop(); }, [scope, revision, paused, runner]);
   useEffect(() => {
-    if (scope && !paused && query.isSuccess && active) wake();
+    if (!retryAttempt || !scope || paused || !active) return;
+    let cancelled = false;
+    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(retryAttempt - 1, 5));
+    const timer = setTimeout(() => {
+      void testServerConnection(scope.serverUrl).then(() => {
+        if (cancelled) return;
+        setRetryState((state) => state.scopeKey === scopeKey ? { ...state, waiting: false } : state);
+        wake();
+      }).catch(() => {
+        if (!cancelled) setRetryState((state) => state.scopeKey === scopeKey ? { ...state, attempt: state.attempt + 1 } : state);
+      });
+    }, delay);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [retryAttempt, scope, scopeKey, paused, active, wake]);
+  useEffect(() => {
+    if (scope && !paused && query.isSuccess && active && !waitingForConnection) wake();
     else if (!scope || paused || (!active && !backgroundUploadsRunning())) runner.stop();
-  }, [scope, active, paused, query.isSuccess, revision, wake, runner]);
+  }, [scope, active, paused, waitingForConnection, query.isSuccess, revision, wake, runner]);
   useEffect(() => () => runner.stop(), [runner]);
   const enqueue = useCallback(async (assets: LocalAsset[], destination: UploadDestination, token: string) => {
     const server = useServerStore.getState();
@@ -115,12 +152,12 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
         objectKey: `tests/${id}/${asset.filename.replace(/[\\/]/g, '_') || 'media'}`,
         state: 'queued', result: null, error: null, createdAt: createdAt + index };
     });
-    await repository.enqueue(jobs); changed(); wake();
-  }, [scope, changed, wake]);
-  const retry = useCallback(async () => { if (scope) { await repository.retry(scope); changed(); wake(); } }, [scope, changed, wake]);
+    await repository.enqueue(jobs); changed(); if (!waitingForConnection) wake();
+  }, [scope, changed, waitingForConnection, wake]);
+  const retry = useCallback(async () => { if (scope) { await repository.retry(scope); changed(); if (!waitingForConnection) wake(); } }, [scope, changed, waitingForConnection, wake]);
   const remove = useCallback(async (id: string) => { await repository.remove(id); changed(); }, [changed]);
   const clearCompleted = useCallback(async () => { if (scope) { await repository.clearCompleted(scope); changed(); } }, [scope, changed]);
   const reload = async () => { const result = await query.refetch(); if (result.error) throw result.error; };
-  return <UploadQueueContext.Provider value={{ jobs: query.data ?? [], phase, paused, ready: query.isSuccess,
+  return <UploadQueueContext.Provider value={{ jobs: query.data ?? [], phase, paused, waitingForConnection, ready: query.isSuccess,
     error: query.error, backgroundAvailable: backgroundUploadsAvailable, backgroundError, enqueue, retry, remove, clearCompleted, reload, setPaused }}>{children}</UploadQueueContext.Provider>;
 }

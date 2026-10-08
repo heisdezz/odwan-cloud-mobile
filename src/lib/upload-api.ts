@@ -1,6 +1,6 @@
 import PocketBase from 'pocketbase';
 import { extract_message } from '@/helpers/api';
-import { UploadError, type UploadResult, type UploadDestination } from './upload-types';
+import { UploadConnectionError, UploadError, type UploadResult, type UploadDestination } from './upload-types';
 
 export async function resolveUploadAlbum(client: PocketBase, name: string, signal?: AbortSignal): Promise<UploadDestination> {
   const trimmed = name.trim();
@@ -37,7 +37,13 @@ export async function sendUpload(options: {
   serverUrl: string; testToken: string; objectKey: string; body: FormData; signal: AbortSignal;
 }, request: typeof fetch = fetch): Promise<UploadResult> {
   const url = `${options.serverUrl}/api/test/s3/upload?${new URLSearchParams({ key: options.objectKey })}`;
-  const response = await request(url, { method: 'POST', headers: { 'X-S3-Test-Token': options.testToken }, body: options.body, signal: options.signal });
+  let response: Response;
+  try {
+    response = await request(url, { method: 'POST', headers: { 'X-S3-Test-Token': options.testToken }, body: options.body, signal: options.signal });
+  } catch (error) {
+    if (options.signal.aborted) throw error;
+    throw new UploadConnectionError();
+  }
   let body: unknown;
   try { body = await response.json(); } catch { throw new UploadError(`Upload failed (HTTP ${response.status}).`, response.status); }
   if (!response.ok) {

@@ -4,7 +4,7 @@ import type { UploadDestination, UploadJob, UploadPhase } from '@/lib/upload-typ
 
 export type UploadQueue = {
   backgroundAvailable: boolean; backgroundError: string | null;
-  jobs: UploadJob[]; phase: UploadPhase; paused: boolean; ready: boolean; error: unknown;
+  jobs: UploadJob[]; phase: UploadPhase; paused: boolean; waitingForConnection: boolean; ready: boolean; error: unknown;
   enqueue: (assets: LocalAsset[], destination: UploadDestination, token: string) => Promise<void>;
   retry: () => Promise<void>; remove: (id: string) => Promise<void>; clearCompleted: () => Promise<void>;
   reload: () => Promise<void>;

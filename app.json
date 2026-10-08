@@ -46,6 +46,7 @@
             "enablePngCrunchInReleaseBuilds": true,
             "enableBundleCompression": true,
             "useLegacyPackaging": true,
+            "usesCleartextTraffic": true,
             "gifEnabled": false,
             "webpEnabled": false,
             "webpAnimated": false

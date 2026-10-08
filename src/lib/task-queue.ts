@@ -6,7 +6,7 @@ export function createTaskQueue(concurrency: number) {
   function pump() {
     while (active < concurrency && pending.length) pending.shift()!();
   }
-  return function enqueue<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  function enqueue<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     return new Promise((resolve, reject) => {
       function abort() {
         const index = pending.indexOf(start);
@@ -25,5 +25,11 @@ export function createTaskQueue(concurrency: number) {
       pending.push(start);
       pump();
     });
+  }
+  enqueue.setConcurrency = (next: number) => {
+    if (!Number.isInteger(next) || next < 1) throw new Error('Concurrency must be a positive integer.');
+    concurrency = next;
+    pump();
   };
+  return enqueue;
 }

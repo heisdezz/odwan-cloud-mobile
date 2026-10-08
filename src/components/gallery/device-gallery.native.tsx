@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useQuery } from '@tanstack/react-query';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { MediaTypeFilter } from '@/components/media/media-filter';
-import { matchesMediaFilter } from '@/helpers/media-filter';
+import { indexMediaFilters } from '@/helpers/media-filter';
 import { useGridStore } from '@/stores/grid-store';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { MediaThumbnail } from '@/components/media/media-thumbnail';
@@ -22,11 +22,15 @@ import { extract_message } from '@/helpers/api';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
+import { useAssetBackupStatus } from '@/providers/upload-activity-provider';
 
 const EMPTY_ASSETS: LocalAsset[] = [];
+const assetKey = (asset: LocalAsset) => asset.id;
+const assetType = (asset: LocalAsset) => asset.mediaType;
 
-function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
+const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
+  const status = useAssetBackupStatus(asset, savedStatus);
   return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.mediaType === 'video' ? 'Video' : 'Photo'}: ${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     width: size - 4, height: size - 4,
     backgroundColor: colors.backgroundElement,
@@ -38,7 +42,7 @@ function GalleryTile({ asset, status, previewEnabled, onPress, size }: { asset: 
       </View>}
     <MediaTileBadges video={asset.mediaType === 'video'} showBackup status={status} />
   </Pressable>;
-}
+});
 
 function GalleryContent() {
   const colors = useTheme();
@@ -51,16 +55,21 @@ function GalleryContent() {
   });
   const mediaFilter = useGridStore((state) => state.mediaFilter);
   const allAssets = gallery.data ?? EMPTY_ASSETS;
-  const assets = useMemo(() => mediaFilter === 'all' ? allAssets : allAssets.filter((asset) => matchesMediaFilter(asset.mediaType, mediaFilter)), [allAssets, mediaFilter]);
+  const displayedFilter = useDeferredValue(mediaFilter);
+  const indexedAssets = useMemo(() => indexMediaFilters(allAssets, assetType), [allAssets]);
+  const assets = indexedAssets[displayedFilter];
   const viewer = useMediaViewer();
   const assetsRef = useRef(assets);
   useEffect(() => { assetsRef.current = assets; }, [assets]);
-  const open = (id: string) => viewer.open({ items: assetsRef.current.map(localViewerItem), selectedId: id });
+  const open = useCallback((id: string) => viewer.open({ items: assetsRef.current.map(localViewerItem), selectedId: id }), [viewer]);
   const statuses = useQuery({
     queryKey: ['backup-status', 'gallery', verifiedUrl, account?.id, gallery.dataUpdatedAt],
     queryFn: () => readGalleryBackupStatuses(verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null),
     enabled: cacheReadable && database.isSuccess && assets.length > 0,
   });
+  const renderItem = useCallback(({ item, size, previewEnabled }: { item: LocalAsset; size: number; previewEnabled: boolean }) =>
+    <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} />,
+  [statuses.data, open]);
   async function grantAccess() {
     setRequesting(true);
     try {
@@ -89,11 +98,11 @@ function GalleryContent() {
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     {cacheReadable && <PageLoader query={gallery}>
-      {() => <GridZoom key={mediaFilter} data={assets}
-        extraData={statuses.data} keyExtractor={(asset) => asset.id}
-        renderItem={({ item, size, previewEnabled }) => <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} />}
+      {() => <GridZoom resetKey={displayedFilter} data={assets}
+        extraData={statuses.data} keyExtractor={assetKey} getItemType={assetType}
+        renderItem={renderItem}
         contentInsets={{ bottom: BottomTabInset + 24 }}
-        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : mediaFilter === 'all' ? 'No photos or videos are accessible.' : `No ${mediaFilter} are accessible.`}</Text>}
+        ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : displayedFilter === 'all' ? 'No photos or videos are accessible.' : `No ${displayedFilter} are accessible.`}</Text>}
         ListFooterComponent={gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
           <Button label="Retry" onPress={() => { void gallery.refetch(); }} />

@@ -1,5 +1,14 @@
+import { galleryInteraction } from './gallery-interaction';
+
 /** Let rendering/input run before each scan page. Native I/O still runs off JS. */
-export function waitForGalleryIdle(signal: AbortSignal, pauseMs = 32) {
+export async function waitForGalleryIdle(signal: AbortSignal, pauseMs = 32) {
+  await galleryInteraction.wait(signal);
+  await waitForIdleSlot(signal, pauseMs);
+  // A gesture may have started while requestIdleCallback was pending.
+  await galleryInteraction.wait(signal);
+}
+
+function waitForIdleSlot(signal: AbortSignal, pauseMs: number) {
   return new Promise<void>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;

@@ -1,18 +1,19 @@
 import { UPSERT_LOCAL_ASSET_SQL, UPSERT_BACKUP_STATUS_SQL, READ_GALLERY_SQL, READ_FULL_GALLERY_SQL, READ_GALLERY_BACKUPS_SQL, FINISH_GALLERY_SCAN_SQL, RECONCILE_GALLERY_IDS_SQL, DELETE_GALLERY_IDS_SQL, SAVE_GALLERY_SYNC_SQL } from './queries';
 import { writeGalleryBatch } from './gallery-index';
 import { createDatabaseAccess } from './database-access';
+import { createDeviceAlbumCache } from './device-album-cache';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
-import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, GALLERY_SYNC_MIGRATION, UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
+import { LOCAL_STORE_TABLES, GALLERY_INDEX_MIGRATION, GALLERY_SYNC_MIGRATION, UPLOAD_QUEUE_MIGRATION, UPLOAD_HISTORY_MIGRATION, DEVICE_ALBUM_MIGRATION, type LocalAsset, type BackupScope, type BackupStatus } from './schema';
 
 // Keep the connection/queue through Fast Refresh; a second JS module must not race it.
 type DatabaseAccess = ReturnType<typeof createDatabaseAccess<SQLiteDatabase>>;
 const runtime = globalThis as typeof globalThis & { __odwanLocalDatabaseAccess?: DatabaseAccess };
-const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
+const connection = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
   open: () => openDatabaseAsync('odwan-local.db', { useNewConnection: true }),
   initialize: async (db) => {
     await db.execAsync('PRAGMA busy_timeout = 3000; PRAGMA foreign_keys = ON;');
     const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if ((version?.user_version ?? 0) > 5) throw new Error('Local database is newer than this app. Update the app.');
+    if ((version?.user_version ?? 0) > 6) throw new Error('Local database is newer than this app. Update the app.');
     const journal = await db.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode');
     if (journal?.journal_mode.toLowerCase() !== 'wal') await db.execAsync('PRAGMA journal_mode = WAL;');
     if ((version?.user_version ?? 0) < 1) await db.withTransactionAsync(() => db.execAsync(LOCAL_STORE_TABLES));
@@ -20,11 +21,27 @@ const access = runtime.__odwanLocalDatabaseAccess ??= createDatabaseAccess({
     if ((version?.user_version ?? 0) < 3) await db.withTransactionAsync(() => db.execAsync(GALLERY_SYNC_MIGRATION));
     if ((version?.user_version ?? 0) < 4) await db.withTransactionAsync(() => db.execAsync(UPLOAD_QUEUE_MIGRATION));
     if ((version?.user_version ?? 0) < 5) await db.withTransactionAsync(() => db.execAsync(UPLOAD_HISTORY_MIGRATION));
+    if ((version?.user_version ?? 0) < 6) await db.withTransactionAsync(() => db.execAsync(DEVICE_ALBUM_MIGRATION));
   },
   close: (db) => db.closeAsync(),
 });
+// Fast Refresh may keep a connection initialized by the previous schema module.
+let albumSchemaReady = false;
+const access = {
+  run<T>(task: (db: SQLiteDatabase) => Promise<T>) {
+    return connection.run(async (db) => {
+      if (!albumSchemaReady) {
+        const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+        if ((version?.user_version ?? 0) < 6) await db.withTransactionAsync(() => db.execAsync(DEVICE_ALBUM_MIGRATION));
+        albumSchemaReady = true;
+      }
+      return task(db);
+    });
+  },
+};
 export function getLocalDatabase() { return access.run(async (db) => db); }
 export function runLocalDatabase<T>(task: (db: SQLiteDatabase) => Promise<T>) { return access.run(task); }
+export const deviceAlbumCache = createDeviceAlbumCache(runLocalDatabase);
 
 async function writeAssets(db: SQLiteDatabase, assets: LocalAsset[], sql = UPSERT_LOCAL_ASSET_SQL) {
   const statement = await db.prepareAsync(sql);
@@ -53,6 +70,7 @@ export function clearGalleryIndex() {
   return access.run((db) => db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM gallery_index');
     await db.runAsync('DELETE FROM gallery_sync_state');
+    await db.runAsync('DELETE FROM device_album_snapshots');
   }));
 }
 export function readGalleryCheckpoint() {

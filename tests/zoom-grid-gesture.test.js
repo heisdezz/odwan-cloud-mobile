@@ -28,8 +28,11 @@ test('a cancelled pinch always releases its preview and busy state', () => {
   const body = source.match(/\.onFinalize\(\(_event, success\) => \{([\s\S]*?)\n    \}\)/)[1];
   const shared = (value) => ({ value, set(next) { this.value = next; } });
   const pinching = shared(true), scale = shared(2), busy = shared(true);
-  new Function('pinching', 'scale', 'busy', 'withTiming', 'success', body)(pinching, scale, busy, (value) => value, false);
+  let interacting = true;
+  new Function('pinching', 'scale', 'busy', 'withTiming', 'success', 'runOnJS', 'setPinchInteraction', body)(
+    pinching, scale, busy, (value) => value, false, (fn) => fn, (value) => { interacting = value; });
   expect(pinching.value).toBe(false);
   expect(scale.value).toBe(1);
   expect(busy.value).toBe(false);
+  expect(interacting).toBe(false);
 });

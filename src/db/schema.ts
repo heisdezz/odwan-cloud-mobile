@@ -95,3 +95,22 @@ BEGIN
 END;
 PRAGMA user_version = 5;
 `;
+
+export const DEVICE_ALBUM_MIGRATION = `
+CREATE TABLE IF NOT EXISTS device_album_snapshots (
+  album_id TEXT PRIMARY KEY NOT NULL,
+  access_scope TEXT NOT NULL,
+  checked_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS device_album_assets (
+  album_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  modified_at REAL NOT NULL,
+  position INTEGER NOT NULL,
+  PRIMARY KEY (album_id, asset_id),
+  FOREIGN KEY (album_id) REFERENCES device_album_snapshots(album_id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id, modified_at) REFERENCES local_assets(id, modified_at)
+);
+CREATE INDEX IF NOT EXISTS device_album_asset_order ON device_album_assets(album_id, position);
+PRAGMA user_version = 6;
+`;

@@ -9,6 +9,7 @@ import { createGridVisibilityStore, updateGridVisibility, type GridRange, type G
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useGridStore } from '@/stores/grid-store';
+import { galleryInteraction } from '@/lib/gallery-interaction';
 
 type RenderGridItem<T> = (props: { item: T; index: number; size: number; previewEnabled: boolean }) => ReactElement | null;
 type GridZoomProps<T> = {
@@ -35,6 +36,13 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   const window = useWindowDimensions();
   const { background } = useTheme();
   const [viewport, setViewport] = useState({ width: window.width, height: window.height });
+  const [interaction] = useState(() => ({ scroll: {}, pinch: {} }));
+  const setPinchInteraction = useCallback((busy: boolean) => galleryInteraction.setBusy(interaction.pinch, busy), [interaction]);
+  const startScrollInteraction = useCallback(() => galleryInteraction.setBusy(interaction.scroll, true), [interaction]);
+  const endScrollInteraction = useCallback(() => galleryInteraction.setBusy(interaction.scroll, false), [interaction]);
+  useEffect(() => () => {
+    galleryInteraction.release(interaction.scroll); galleryInteraction.release(interaction.pinch);
+  }, [interaction]);
   const savedColumns = useGridStore((state) => state.columns);
   const setColumns = useGridStore((state) => state.setColumns);
   const columns = savedColumns ?? clampColumns(Math.floor(window.width / 150));
@@ -87,6 +95,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     .simultaneousWithExternalGesture(nativeScroll)
     .onStart((event) => {
       if (busy.value) return;
+      runOnJS(setPinchInteraction)(true);
       pinching.set(true); focalX.set(event.focalX); focalY.set(event.focalY); startScroll.set(scroll.value);
     })
     .onUpdate((event) => {
@@ -101,8 +110,9 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     })
     .onFinalize((_event, success) => {
       pinching.set(false);
+      runOnJS(setPinchInteraction)(false);
       if (!success) { scale.set(withTiming(1, { duration: 160 })); busy.set(false); }
-    }), [count, columns, nativeScroll, commitPinch, scale, focalX, focalY, startScroll, scroll, busy, pinching]);
+    }), [count, columns, nativeScroll, commitPinch, setPinchInteraction, scale, focalX, focalY, startScroll, scroll, busy, pinching]);
   const previewStyle = useAnimatedStyle(() => ({ transform: [
     { translateX: (focalX.value - viewportWidth.value / 2) * (1 - scale.value) },
     { translateY: (focalY.value - viewportHeight.value / 2) * (1 - scale.value) }, { scale: scale.value },
@@ -123,6 +133,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
       pending.current = null;
       list.current?.scrollToOffset({ offset: 0, animated: false });
       scroll.set(0); updateWindow(0); scale.set(1); pinching.set(false); busy.set(false);
+      setPinchInteraction(false);
       return;
     }
     if (pending.current?.columns !== columns) return;
@@ -130,13 +141,15 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     pending.current = null;
     list.current?.scrollToOffset({ offset, animated: false });
     scroll.set(offset); updateWindow(offset); scale.set(1); busy.set(false);
-  }, [resetKey, columns, scroll, updateWindow, scale, pinching, busy]);
+  }, [resetKey, columns, scroll, updateWindow, scale, pinching, busy, setPinchInteraction]);
   return <View style={rootStyle} onLayout={onLayout}>
     <GestureDetector gesture={pinch}><Animated.View style={[tw`flex-1`, previewStyle]}>
       <FlashList ref={list} {...props} data={data} keyExtractor={keyExtractor} numColumns={columns}
         extraData={listExtra} renderScrollComponent={ScrollComponent} renderItem={renderCell}
         drawDistance={size * 2} maintainVisibleContentPosition={{ disabled: true }}
         contentContainerStyle={contentStyle} scrollEventThrottle={16}
+        onScrollBeginDrag={startScrollInteraction} onScrollEndDrag={endScrollInteraction}
+        onMomentumScrollBegin={startScrollInteraction} onMomentumScrollEnd={endScrollInteraction}
         onLoad={onLoad} onCommitLayoutEffect={onCommitLayoutEffect} />
     </Animated.View></GestureDetector>
   </View>;

@@ -19,9 +19,12 @@ import { UploadConnectionError, UploadError, type UploadDestination, type Upload
 import { useServerStore } from '@/stores/server-store';
 import { uploadScopeKey, useUploadPreferences } from '@/stores/upload-preferences-store';
 import { UploadQueueContext } from './upload-queue-context';
+import { UploadActivityProvider } from './upload-activity-provider';
+import { galleryInteraction } from '@/lib/gallery-interaction';
 
 // Recover interrupted entries once per JS runtime, rather than on every mount/focus.
 let recovery: Promise<void> | undefined;
+const EMPTY_JOBS: UploadJob[] = [];
 
 export function UploadQueueProvider({ children }: PropsWithChildren) {
   const client = useQueryClient();
@@ -52,11 +55,21 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
     },
     networkMode: 'always', staleTime: Infinity, refetchOnWindowFocus: false,
   });
+  const [backupRefresh] = useState(() => {
+    let dirty = false;
+    const flush = () => {
+      if (!dirty || galleryInteraction.isBusy()) return;
+      dirty = false;
+      void client.invalidateQueries({ queryKey: ['backup-status'] });
+    };
+    return { request: () => { dirty = true; flush(); }, flush };
+  });
+  useEffect(() => galleryInteraction.subscribe(backupRefresh.flush), [backupRefresh]);
   const changed = useCallback(() => {
     void client.invalidateQueries({ queryKey: ['upload-queue'] });
-    void client.invalidateQueries({ queryKey: ['backup-status'] });
+    backupRefresh.request();
     void client.invalidateQueries({ queryKey: ['upload-history'] });
-  }, [client]);
+  }, [client, backupRefresh]);
   const [worker] = useState(() => createUploadWorker({ repository, scope: () => AppState.currentState === 'active' || backgroundUploadsRunning() ? runtime.getState().scope : null,
     upload: async (job, signal) => {
       setPhase({ id: job.id, phase: 'preparing' });
@@ -158,6 +171,8 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
   const remove = useCallback(async (id: string) => { await repository.remove(id); changed(); }, [changed]);
   const clearCompleted = useCallback(async () => { if (scope) { await repository.clearCompleted(scope); changed(); } }, [scope, changed]);
   const reload = async () => { const result = await query.refetch(); if (result.error) throw result.error; };
-  return <UploadQueueContext.Provider value={{ jobs: query.data ?? [], phase, paused, waitingForConnection, ready: query.isSuccess,
-    error: query.error, backgroundAvailable: backgroundUploadsAvailable, backgroundError, enqueue, retry, remove, clearCompleted, reload, setPaused }}>{children}</UploadQueueContext.Provider>;
+  return <UploadActivityProvider jobs={query.data ?? EMPTY_JOBS} scopeKey={JSON.stringify([verifiedUrl, account?.id, revision])}>
+    <UploadQueueContext.Provider value={{ jobs: query.data ?? EMPTY_JOBS, phase, paused, waitingForConnection, ready: query.isSuccess,
+      error: query.error, backgroundAvailable: backgroundUploadsAvailable, backgroundError, enqueue, retry, remove, clearCompleted, reload, setPaused }}>{children}</UploadQueueContext.Provider>
+  </UploadActivityProvider>;
 }

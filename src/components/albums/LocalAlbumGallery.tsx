@@ -17,23 +17,25 @@ import { Button } from '@/components/ui';
 import { extract_message } from '@/helpers/api';
 import { localViewerItem } from '@/helpers/media-viewer';
 import { useTheme } from '@/hooks/use-theme';
-import { loadDeviceAlbumAssets, loadDeviceAlbums } from '@/lib/device-albums.native';
+import { useDeviceAlbumAssets } from '@/hooks/use-device-album-assets.native';
+import { loadDeviceAlbums } from '@/lib/device-albums.native';
 import { readBackupStatuses } from '@/db/local-store.native';
 import { backupLabel, type BackupStatus, type LocalAsset } from '@/db/schema';
 import tw from '@/lib/tw';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
-import { useUploadQueue } from '@/providers/upload-queue-context';
+import { useAssetBackupStatus, useUploadPendingCount } from '@/providers/upload-activity-provider';
 import { useServerStore } from '@/stores/server-store';
 
 const assetKey = (asset: LocalAsset) => asset.id;
 const assetType = (asset: LocalAsset) => asset.mediaType;
 const EMPTY_ASSETS: LocalAsset[] = [];
 
-const AlbumTile = memo(function AlbumTile({ item, size, previewEnabled, selecting, selected, status, onToggle, onOpen, onSelect }: {
+const AlbumTile = memo(function AlbumTile({ item, size, previewEnabled, selecting, selected, status: savedStatus, onToggle, onOpen, onSelect }: {
   item: LocalAsset; size: number; previewEnabled: boolean; selecting: boolean; selected: boolean; status?: BackupStatus;
   onToggle: (id: string) => void; onOpen: (id: string) => void; onSelect: (id: string) => void;
 }) {
   const colors = useTheme();
+  const status = useAssetBackupStatus(item, savedStatus);
   return <Pressable accessibilityRole={selecting ? 'checkbox' : 'button'}
     accessibilityLabel={`${item.mediaType === 'video' ? 'Video' : 'Photo'}: ${item.filename}. ${backupLabel(status)}`}
     accessibilityHint={selecting ? 'Toggle selection' : 'Hold to select for upload'} accessibilityState={selecting ? { checked: selected } : undefined}
@@ -67,29 +69,19 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const viewer = useMediaViewer();
-  const queue = useUploadQueue();
+  const pending = useUploadPendingCount();
   const { verifiedUrl, account, revision } = useServerStore();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [sheet, setSheet] = useState<'destination' | 'queue' | null>(null);
-  const query = useQuery({ queryKey: ['device-albums', 'assets', id],
-    queryFn: ({ signal }) => loadDeviceAlbumAssets(id, signal),
-    staleTime: Infinity, networkMode: 'always', refetchOnWindowFocus: false,
-  });
+  const query = useDeviceAlbumAssets(id);
   const deviceAlbums = useQuery({ queryKey: ['device-albums', 'list'], queryFn: loadDeviceAlbums,
     enabled: !title, staleTime: Infinity, networkMode: 'always' });
   const albumName = title ?? deviceAlbums.data?.find((album) => album.id === id)?.title ?? '';
   const scope = useMemo(() => verifiedUrl && account ? { serverUrl: verifiedUrl, accountId: account.id } : null, [verifiedUrl, account]);
   const backup = useQuery({ queryKey: ['backup-status', 'device-album', id, verifiedUrl, account?.id, query.dataUpdatedAt],
     enabled: !!scope && query.isSuccess, queryFn: () => readBackupStatuses(query.data ?? [], scope), staleTime: Infinity, networkMode: 'always' });
-  const statuses = useMemo(() => {
-    const next = { ...backup.data };
-    const versions = new Map((query.data ?? []).map((asset) => [asset.id, asset.modifiedAt]));
-    for (const job of queue.jobs) {
-      if (versions.get(job.asset.id) === job.asset.modifiedAt) next[job.asset.id] = job.result || next[job.asset.id] === 'backed_up' ? 'backed_up' : job.state === 'error' ? 'error' : job.state === 'queued' ? 'pending' : 'uploading';
-    }
-    return next;
-  }, [backup.data, queue.jobs, query.data]);
+  const statuses = backup.data;
   const mediaFilter = useGridStore((state) => state.mediaFilter);
   // Let the filter chips respond before the recycler updates a large dataset.
   const displayedFilter = useDeferredValue(mediaFilter);
@@ -100,10 +92,9 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
   const select = useCallback((assetId: string) => { setSelecting(true); setSelected((old) => new Set(old).add(assetId)); }, []);
   const open = useCallback((assetId: string) => viewer.open({ items: assets.map(localViewerItem), selectedId: assetId }), [assets, viewer]);
   const cancel = useCallback(() => { setSelecting(false); setSelected(new Set()); }, []);
-  const pending = queue.jobs.filter((job) => job.state !== 'success').length;
   const renderItem = useCallback(({ item, size, previewEnabled }: { item: LocalAsset; size: number; previewEnabled: boolean }) =>
     <AlbumTile item={item} size={size} previewEnabled={previewEnabled} selecting={selecting} selected={selected.has(item.id)}
-      status={statuses[item.id]} onToggle={toggle} onOpen={open} onSelect={select} />,
+      status={statuses?.[item.id]} onToggle={toggle} onOpen={open} onSelect={select} />,
   [selecting, selected, statuses, toggle, open, select]);
   return <View style={tw`flex-1`}>
     <View style={tw`shrink-0 px-4 py-1 flex-row items-center gap-2`}>

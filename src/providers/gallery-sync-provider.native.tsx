@@ -9,6 +9,8 @@ import { syncGalleryUpdates } from '@/lib/gallery-updates';
 import { createGallerySyncQueue } from '@/lib/gallery-sync-queue';
 import { extract_message } from '@/helpers/api';
 import { toast } from 'sonner-native';
+import { galleryInteraction } from '@/lib/gallery-interaction';
+import { waitForGalleryIdle } from '@/lib/gallery-scheduler';
 
 function useGallerySyncState() {
   const client = useQueryClient();
@@ -70,7 +72,7 @@ function useGallerySyncState() {
               id: toastId, description: `${total.toLocaleString()} items ${full ? 'scanned' : 'updated'}`, duration: Infinity,
             });
           }
-          if (full && initialScan && !signal.aborted && Date.now() - lastPublish >= 5000) {
+          if (full && initialScan && !signal.aborted && !galleryInteraction.isBusy() && Date.now() - lastPublish >= 5000) {
             lastPublish = Date.now();
             void client.invalidateQueries({ queryKey: ['device-gallery'] });
           }
@@ -100,6 +102,7 @@ function useGallerySyncState() {
         } else {
           const upserts = [...batch].filter(([, action]) => action === 'upsert').map(([id]) => id);
           for (let at = 0; at < upserts.length; at += 20) {
+            await waitForGalleryIdle(signal);
             if (signal.aborted) return;
             const assets = await loadDeviceMediaByIds(upserts.slice(at, at + 20));
             if (signal.aborted) return;
@@ -109,6 +112,7 @@ function useGallerySyncState() {
           await removeGalleryIds([...batch].filter(([, action]) => action === 'delete').map(([id]) => id), signal);
         }
         if (signal.aborted) return;
+        await waitForGalleryIdle(signal, 0);
         await client.invalidateQueries({ queryKey: ['device-gallery'] });
         await client.invalidateQueries({ queryKey: ['backup-status'] });
         await client.invalidateQueries({ queryKey: ['device-albums'] });

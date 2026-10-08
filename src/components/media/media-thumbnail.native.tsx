@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Image } from 'expo-image';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { getMediaThumbnail, deleteMediaThumbnail } from '@/lib/media-thumbnails.native';
+import { getMediaThumbnail, deleteMediaThumbnail, invalidateMediaThumbnail } from '@/lib/media-thumbnails.native';
 import { useServerStore } from '@/stores/server-store';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
@@ -32,7 +32,7 @@ function ActiveThumbnail({ source, cacheKey, name, video = false }: MediaThumbna
     networkMode: 'always',
   });
   return <View style={tw`w-full h-full`}>
-    {preview.data && !failed && !preview.isFetching ? <Image accessible accessibilityLabel={`${video ? 'Video' : 'Photo'} preview: ${name}`} source={preview.data} recyclingKey={identity} style={tw`w-full h-full`} contentFit="cover" cachePolicy="memory" onError={() => setFailedKey(failureKey)} />
+    {preview.data && !failed && !preview.isFetching ? <Image accessible accessibilityLabel={`${video ? 'Video' : 'Photo'} preview: ${name}`} source={preview.data} recyclingKey={identity} style={tw`w-full h-full`} contentFit="cover" cachePolicy="memory" onError={() => { invalidateMediaThumbnail(preview.data!); setFailedKey(failureKey); }} />
       : <View style={tw`flex-1 justify-center items-center px-1 gap-2`}>
         {(preview.isPending || preview.isFetching) && !failed ? <ActivityIndicator color={colors.textSecondary} /> : <Pressable onPress={(event) => {
           event.stopPropagation();

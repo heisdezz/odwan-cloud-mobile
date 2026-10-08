@@ -4,12 +4,17 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
 import { createTaskQueue } from './task-queue';
 import { createPersistentThumbnailCache } from './persistent-thumbnail-cache';
+import { createThumbnailLookup } from './thumbnail-lookup';
+import { generateDeviceThumbnail } from './device-thumbnails.native';
+import { galleryInteraction } from './gallery-interaction';
 import { generateVideoThumbnail } from './video-thumbnails.native';
 import { thumbnailDimensions, thumbnailIdentity, THUMBNAIL_QUALITY } from '@/helpers/thumbnail';
 
 const directory = () => new Directory(Paths.document, 'media-thumbnails-v1');
 const fileFor = (key: string) => new File(directory(), `${key}.jpg`);
-const enqueue = createTaskQueue(2);
+const enqueue = createTaskQueue(galleryInteraction.isBusy() ? 1 : 2);
+galleryInteraction.subscribe(() => enqueue.setConcurrency(galleryInteraction.isBusy() ? 1 : 2));
+const lookup = createThumbnailLookup();
 const getCached = createPersistentThumbnailCache({
   read: async (key) => { const file = fileFor(key); return file.exists && file.size > 0 ? file.uri : undefined; },
 });
@@ -37,17 +42,25 @@ async function saveImage(image: Exclude<Parameters<typeof ImageManipulator.manip
 }
 
 export async function getMediaThumbnail(source: { uri: string; headers?: Record<string, string> }, cacheKey: readonly (string | number)[], video: boolean, signal: AbortSignal) {
-  const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, thumbnailIdentity(cacheKey));
-  return getCached(key, () => enqueue(async () => {
-    // Once decoding starts, finish and persist even if the cell scrolls offscreen.
-    // The queue still cancels work that hasn't started yet.
-    if (video) return generateVideoThumbnail({ ...source, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
-    const image = await Image.loadAsync(source, { maxWidth: 256, maxHeight: 256 });
-    try { return await saveImage(image, key); }
-    finally { image.release(); }
-  }, signal));
+  return lookup.get(thumbnailIdentity(cacheKey), async () => {
+    const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, thumbnailIdentity(cacheKey));
+    return getCached(key, () => enqueue(async () => {
+      // Once decoding starts, finish and persist even if the cell scrolls offscreen.
+      // The queue still cancels work that hasn't started yet.
+      if (cacheKey[0] === 'local') {
+        const generated = await generateDeviceThumbnail(source.uri, String(cacheKey[1]), video, fileFor(key).uri);
+        if (generated) return generated;
+      }
+      if (video) return generateVideoThumbnail({ ...source, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
+      const image = await Image.loadAsync(source, { maxWidth: 256, maxHeight: 256 });
+      try { return await saveImage(image, key); }
+      finally { image.release(); }
+    }, signal));
+  });
 }
+export const invalidateMediaThumbnail = (uri: string) => lookup.invalidate(uri);
 export function deleteMediaThumbnail(uri: string) {
+  lookup.invalidate(uri);
   const file = new File(uri);
   // Only remove files from our thumbnail directory.
   if (uri.startsWith(`${directory().uri.replace(/\/$/, '')}/`) && file.exists) file.delete();

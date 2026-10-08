@@ -14,6 +14,8 @@ type RenderGridItem<T> = (props: { item: T; index: number; size: number; preview
 type GridZoomProps<T> = {
   data: T[]; renderItem: RenderGridItem<T>; keyExtractor: (item: T) => string;
   extraData?: unknown; contentInsets?: { top?: number; bottom?: number };
+  /** Return to the top for a new filter without destroying the recycler. */
+  resetKey?: string | number;
   getItemType?: (item: T, index: number) => string | number;
   onEndReached?: () => void; onEndReachedThreshold?: number;
   ListEmptyComponent?: ReactElement; ListFooterComponent?: ReactElement | null;
@@ -29,7 +31,7 @@ function GridPreviewCell<T>({ item, index, size, target, renderItem, visibility 
 const PreviewCell = memo(GridPreviewCell) as typeof GridPreviewCell;
 
 /** UI-thread scroll tracking; only cells entering/leaving the thumbnail window update. */
-export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, contentInsets, ...props }: GridZoomProps<T>) {
+export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, contentInsets, resetKey, ...props }: GridZoomProps<T>) {
   const window = useWindowDimensions();
   const { background } = useTheme();
   const [viewport, setViewport] = useState({ width: window.width, height: window.height });
@@ -41,6 +43,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   const count = data.length;
   const list = useRef<FlashListRef<T>>(null);
   const pending = useRef<{ columns: number; offset: number } | null>(null);
+  const appliedResetKey = useRef(resetKey);
   const [visibility] = useState(() => createGridVisibilityStore(gridWindow(count, columns, viewport.width, viewport.height, 0, top)));
   const nativeRef = useAnimatedRef<ScrollView>();
   // This attaches a separate native listener, preserving FlashList's JS onScroll.
@@ -115,12 +118,19 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   }, []);
   const onLoad = useCallback(() => updateWindow(scroll.value), [updateWindow, scroll]);
   const onCommitLayoutEffect = useCallback(() => {
+    if (appliedResetKey.current !== resetKey) {
+      appliedResetKey.current = resetKey;
+      pending.current = null;
+      list.current?.scrollToOffset({ offset: 0, animated: false });
+      scroll.set(0); updateWindow(0); scale.set(1); pinching.set(false); busy.set(false);
+      return;
+    }
     if (pending.current?.columns !== columns) return;
     const offset = pending.current.offset;
     pending.current = null;
     list.current?.scrollToOffset({ offset, animated: false });
     scroll.set(offset); updateWindow(offset); scale.set(1); busy.set(false);
-  }, [columns, scroll, updateWindow, scale, busy]);
+  }, [resetKey, columns, scroll, updateWindow, scale, pinching, busy]);
   return <View style={rootStyle} onLayout={onLayout}>
     <GestureDetector gesture={pinch}><Animated.View style={[tw`flex-1`, previewStyle]}>
       <FlashList ref={list} {...props} data={data} keyExtractor={keyExtractor} numColumns={columns}

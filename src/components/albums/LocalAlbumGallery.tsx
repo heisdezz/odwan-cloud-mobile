@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,7 +6,7 @@ import { SymbolView } from 'expo-symbols';
 import LocalMediaAccess from './LocalMediaAccess.native';
 import PageLoader from '@/components/layouts/PageLoader';
 import { MediaTypeFilter } from '@/components/media/media-filter';
-import { matchesMediaFilter } from '@/helpers/media-filter';
+import { indexMediaFilters } from '@/helpers/media-filter';
 import { useGridStore } from '@/stores/grid-store';
 import { GridZoom } from '@/components/media/grid-zoom';
 import { MediaThumbnail } from '@/components/media/media-thumbnail';
@@ -24,6 +24,10 @@ import tw from '@/lib/tw';
 import { useMediaViewer } from '@/providers/media-viewer-provider';
 import { useUploadQueue } from '@/providers/upload-queue-context';
 import { useServerStore } from '@/stores/server-store';
+
+const assetKey = (asset: LocalAsset) => asset.id;
+const assetType = (asset: LocalAsset) => asset.mediaType;
+const EMPTY_ASSETS: LocalAsset[] = [];
 
 const AlbumTile = memo(function AlbumTile({ item, size, previewEnabled, selecting, selected, status, onToggle, onOpen, onSelect }: {
   item: LocalAsset; size: number; previewEnabled: boolean; selecting: boolean; selected: boolean; status?: BackupStatus;
@@ -87,7 +91,10 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
     return next;
   }, [backup.data, queue.jobs, query.data]);
   const mediaFilter = useGridStore((state) => state.mediaFilter);
-  const assets = useMemo(() => (query.data ?? []).filter((asset) => matchesMediaFilter(asset.mediaType, mediaFilter)), [query.data, mediaFilter]);
+  // Let the filter chips respond before the recycler updates a large dataset.
+  const displayedFilter = useDeferredValue(mediaFilter);
+  const indexedAssets = useMemo(() => indexMediaFilters(query.data ?? EMPTY_ASSETS, assetType), [query.data]);
+  const assets = indexedAssets[displayedFilter];
   const selectedAssets = useMemo(() => (query.data ?? []).filter((asset) => selected.has(asset.id)), [query.data, selected]);
   const toggle = useCallback((assetId: string) => setSelected((old) => { const next = new Set(old); if (next.has(assetId)) next.delete(assetId); else next.add(assetId); return next; }), []);
   const select = useCallback((assetId: string) => { setSelecting(true); setSelected((old) => new Set(old).add(assetId)); }, []);
@@ -111,9 +118,9 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
       </>}
     </View>
     <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />
-    <PageLoader query={query}>{() => <GridZoom key={mediaFilter} data={assets} keyExtractor={(asset) => asset.id} renderItem={renderItem}
+    <PageLoader query={query}>{() => <GridZoom resetKey={displayedFilter} data={assets} keyExtractor={assetKey} getItemType={assetType} renderItem={renderItem}
       extraData={selected} contentInsets={{ bottom: selecting ? 100 + insets.bottom : 24 }}
-      ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-base text-center', { color: colors.textSecondary })}>{mediaFilter === 'all' ? 'No accessible photos or videos in this album.' : `No ${mediaFilter} in this album.`}</Text>}
+      ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-base text-center', { color: colors.textSecondary })}>{displayedFilter === 'all' ? 'No accessible photos or videos in this album.' : `No ${displayedFilter} in this album.`}</Text>}
       ListFooterComponent={query.error ? <View style={tw`px-6 py-4 gap-3`}>
         <Text accessibilityRole="alert" style={tw.style('text-base', { color: colors.text })}>{extract_message(query.error)}</Text>
         <Button label="Retry" loading={query.isFetching} onPress={() => { void query.refetch(); }} />

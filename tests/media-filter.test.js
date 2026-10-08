@@ -1,6 +1,20 @@
 import { expect, test } from 'bun:test';
 import PocketBase from 'pocketbase';
-import { matchesMediaFilter, mediaMimePattern } from '../src/helpers/media-filter';
+import { indexMediaFilters, matchesMediaFilter, mediaMimePattern } from '../src/helpers/media-filter';
+
+test('indexed filters preserve album ordering, object identity and the unfiltered snapshot', () => {
+  const items = [
+    { id: '1', type: 'video' }, { id: '2', type: 'photo' },
+    { id: '3', type: 'image/jpeg' }, { id: '4', type: 'video/mp4' },
+    { id: '5', type: 'audio/mp3' },
+  ];
+  const indexed = indexMediaFilters(items, (item) => item.type);
+  expect(indexed.all).toBe(items);
+  expect(indexed.images).toEqual([items[1], items[2]]);
+  expect(indexed.videos).toEqual([items[0], items[3]]);
+  expect(indexed.images[0]).toBe(items[1]);
+  expect(indexMediaFilters([], (item) => item.type)).toEqual({ all: [], images: [], videos: [] });
+});
 import { createGridStore } from '../src/stores/grid-store';
 
 test('filters recognize device photo types and server MIME types', () => {

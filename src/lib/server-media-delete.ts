@@ -7,6 +7,7 @@ export async function deleteServerMedia(
   remove: (id: string) => Promise<unknown>,
   isCurrent: () => boolean,
   progress: (completed: number, total: number) => void = () => {},
+  ignoreMissing = true,
 ) {
   const unique = [...new Set(ids)];
   const deleted: string[] = [];
@@ -17,7 +18,7 @@ export async function deleteServerMedia(
     try { await remove(id); deleted.push(id); }
     catch (error) {
       // Already missing is an idempotent success. Permissions/network errors retain selection.
-      if ((error as { status?: number })?.status === 404) deleted.push(id);
+      if (ignoreMissing && (error as { status?: number })?.status === 404) deleted.push(id);
       else failed.push({ id, error });
     }
     progress(deleted.length + failed.length, unique.length);

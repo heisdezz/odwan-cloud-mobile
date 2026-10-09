@@ -11,6 +11,7 @@ import { downloadServerThumbnail } from './remote-thumbnails.native';
 import { galleryInteraction } from './gallery-interaction';
 import { generateVideoThumbnail } from './video-thumbnails.native';
 import { thumbnailDimensions, thumbnailIdentity, THUMBNAIL_QUALITY } from '@/helpers/thumbnail';
+import { refreshThumbnailCache } from '@/stores/thumbnail-cache-store';
 
 const directory = () => new Directory(Paths.document, 'media-thumbnails-v1');
 const fileFor = (key: string) => new File(directory(), `${key}.jpg`);
@@ -72,4 +73,33 @@ export function deleteMediaThumbnail(uri: string) {
   const file = new File(uri);
   // Only remove files from our thumbnail directory.
   if (uri.startsWith(`${directory().uri.replace(/\/$/, '')}/`) && file.exists) file.delete();
+}
+
+export async function readThumbnailStorage() {
+  const folder = directory();
+  const files = folder.exists ? folder.list().filter((entry): entry is File => entry instanceof File && entry.name.endsWith('.jpg')) : [];
+  let bytes = 0;
+  for (let index = 0; index < files.length; index++) {
+    bytes += files[index].size ?? 0;
+    if (index % 100 === 99) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return { bytes, files: files.length, supported: true };
+}
+
+export async function clearThumbnailStorage() {
+  const token = {};
+  galleryInteraction.setBusy(token, true);
+  try {
+    await Promise.all([queues.local.whenIdle(), queues.remote.whenIdle()]);
+    lookup.clear();
+    const folder = directory();
+    if (folder.exists) {
+      let processed = 0;
+      for (const file of folder.list()) {
+        if (file instanceof File && file.name.endsWith('.jpg') && file.exists) file.delete();
+        if (++processed % 50 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    refreshThumbnailCache();
+  } finally { galleryInteraction.release(token); }
 }

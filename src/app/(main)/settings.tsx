@@ -1,3 +1,7 @@
+import { StorageSettings } from '@/components/settings/storage-settings';
+import { AppearanceSettings } from '@/components/settings/appearance-settings';
+import { BackupStatusCard } from '@/components/uploads/backup-status-card';
+import { useState } from 'react';
 import { clearServerQueries } from "@/lib/server-query-cache";
 import {
   logoutServerSession,
@@ -5,7 +9,7 @@ import {
 } from "@/lib/server-session";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SymbolView } from "expo-symbols";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
@@ -18,6 +22,8 @@ import { useServerStore } from "@/stores/server-store";
 
 export default function SettingsScreen() {
   const colors = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [draftUrl, setDraftUrl] = useState("");
   const server = useServerStore();
   const queryClient = useQueryClient();
   const logout = useMutation({
@@ -34,6 +40,7 @@ export default function SettingsScreen() {
     },
     onSuccess: ({ url, milliseconds }, { revision }) => {
       if (useServerStore.getState().verify(url, revision)) {
+        setEditing(false);
         toast.success(`Connected to server (${milliseconds} ms)`);
         void restoreServerSession(url, revision).catch(() => {
           if (useServerStore.getState().revision === revision)
@@ -68,9 +75,10 @@ export default function SettingsScreen() {
         >
           Settings
         </Text>
+        <BackupStatusCard />
         <View style={tw`gap-2`}>
           <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
-            Uploads
+            Backup
           </Text>
           {(
             [
@@ -79,6 +87,7 @@ export default function SettingsScreen() {
                 detail: "Manage pending uploads, pause, or retry",
                 href: "/uploads/current",
               },
+              { title: "Trash", detail: "Restore recently removed server media", href: "/trash" },
               {
                 title: "Uploaded",
                 detail: "Completed uploads saved in history",
@@ -90,7 +99,7 @@ export default function SettingsScreen() {
               key={entry.href}
               accessibilityRole="button"
               accessibilityLabel={entry.title}
-              onPress={() => router.push(entry.href)}
+              onPress={() => router.push(entry.href as Href)}
               style={({ pressed }) =>
                 tw.style("min-h-16 py-3 flex-row items-center gap-3", {
                   opacity: pressed ? 0.7 : 1,
@@ -123,6 +132,7 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
+        {(!server.verifiedUrl || editing) ? <View style={tw`gap-4`}>
         <View style={tw`gap-3`}>
           <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
             Server connection
@@ -133,35 +143,33 @@ export default function SettingsScreen() {
         </View>
         <Input
           label="Server URL"
-          value={server.urlInput}
+          value={editing ? draftUrl : server.urlInput}
           placeholder="https://your-server.com"
-          onChangeText={(value) => {
-            logout.reset();
-            server.setUrlInput(value);
-            clearServerQueries(queryClient);
-          }}
+          onChangeText={(value) => { if (editing) setDraftUrl(value); else server.setUrlInput(value); }}
           error={error}
           helperText="Include http:// or https://. Use your computer’s LAN address for a local server."
         />
         <Button
           label="Test connection"
           loading={connection.isPending}
-          disabled={!server.urlInput.trim()}
+          disabled={!(editing ? draftUrl : server.urlInput).trim()}
           onPress={() => {
+            const input = editing ? draftUrl : server.urlInput;
+            if (editing) server.setUrlInput(input);
             connection.reset();
             const revision = server.beginCheck();
             clearServerQueries(queryClient);
-            connection.mutate({ input: server.urlInput, revision });
+            connection.mutate({ input, revision });
           }}
         />
+        {editing && <Button label="Cancel editing" variant="text" onPress={() => setEditing(false)} />}
+        </View> : <View style={tw`gap-2`}>
+          <Text style={tw.style('text-xl font-medium', { color: colors.text })}>Connection</Text>
+          <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{server.verifiedUrl}</Text>
+          <Button label="Edit server connection" variant="text" onPress={() => { setDraftUrl(server.urlInput); setEditing(true); }} />
+        </View>}
         {server.verifiedUrl && (
           <View style={tw`gap-4`}>
-            <Text
-              accessibilityLiveRegion="polite"
-              style={tw.style("text-base", { color: colors.text })}
-            >
-              Connected to {server.verifiedUrl}
-            </Text>
             {server.account ? (
               <>
                 <Text
@@ -189,6 +197,8 @@ export default function SettingsScreen() {
             )}
           </View>
         )}
+        <StorageSettings />
+        <AppearanceSettings />
       </ScrollView>
     </SafeAreaView>
   );

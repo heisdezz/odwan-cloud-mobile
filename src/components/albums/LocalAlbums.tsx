@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react';
+import { AlbumBrowserTools, type AlbumSort } from './album-browser-tools';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
@@ -97,6 +99,8 @@ function LocalAlbumTile({
 function AlbumList() {
   const colors = useTheme();
   const client = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<AlbumSort>("name");
   const query = useQuery({
     queryKey: ["device-albums", "list"],
     queryFn: loadDeviceAlbums,
@@ -104,9 +108,12 @@ function AlbumList() {
     networkMode: "always",
     refetchOnWindowFocus: false,
   });
+  const albums = useMemo(() => (query.data ?? []).filter((album) => album.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => sort === "count" ? b.assetCount - a.assetCount || a.title.localeCompare(b.title) : a.title.localeCompare(b.title)), [query.data, search, sort]);
   return (
+    <View style={tw`flex-1`}>
+    <AlbumBrowserTools search={search} onSearch={setSearch} sort={sort} onSort={setSort} />
     <PageLoader query={query}>
-      {(albums) => (
+      {() => (
         <FlashList
           data={albums}
           numColumns={2}
@@ -160,6 +167,7 @@ function AlbumList() {
         />
       )}
     </PageLoader>
+    </View>
   );
 }
 

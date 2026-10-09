@@ -1,3 +1,4 @@
+import { BackupStatusCard } from '@/components/uploads/backup-status-card';
 import { createMediaItemsSelector } from "@/helpers/media-pages";
 import { useCallback, useMemo } from "react";
 import { router } from "expo-router";
@@ -67,6 +68,7 @@ export default function HomeScreen() {
         </View>
       ) : (
         <View style={tw`flex-1`}>
+          <BackupStatusCard />
           <MediaTypeFilter refreshing={query.isFetching} onRefresh={refresh} />
         <PageLoader query={query}>
           {() => (

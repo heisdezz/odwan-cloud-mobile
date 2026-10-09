@@ -1,7 +1,9 @@
+import { useThumbnailCacheStore } from '@/stores/thumbnail-cache-store';
+import { ThumbnailRetry } from './thumbnail-retry';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useServerStore } from '@/stores/server-store';
 import { createTaskQueue } from '@/lib/task-queue';
@@ -29,12 +31,13 @@ export function MediaThumbnail(props: MediaThumbnailProps) {
 /** Fetch headers explicitly: browser image elements cannot attach Authorization. */
 function ServerThumbnail({ source, cacheKey, name, video }: MediaThumbnailProps) {
   const colors = useTheme();
+  const epoch = useThumbnailCacheStore((state) => state.epoch);
   const revision = useServerStore((state) => state.revision);
-  const identity = JSON.stringify([...cacheKey, revision, 'pocketbase-thumb-v2']);
+  const identity = JSON.stringify([...cacheKey, revision, 'pocketbase-thumb-v2', epoch]);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [object, setObject] = useState<{ bytes: Uint8Array; uri: string } | null>(null);
   const preview = useQuery({
-    queryKey: ['media-thumbnail', ...cacheKey, revision, 'pocketbase-thumb-v2'],
+    queryKey: ['media-thumbnail', ...cacheKey, revision, 'pocketbase-thumb-v2', epoch],
     queryFn: ({ signal }) => enqueue(() => withRemoteThumbnailSource({
       download: (downloadSignal, progress) => fetchServerThumbnail(source, downloadSignal, progress),
       publish: async (bytes) => bytes, cleanup: () => {},
@@ -56,10 +59,7 @@ function ServerThumbnail({ source, cacheKey, name, video }: MediaThumbnailProps)
       style={tw`w-full h-full`} contentFit="cover" cachePolicy="memory" onError={() => setFailedKey(identity)} />
       : <View style={tw`flex-1 items-center justify-center`}>
         {(preview.isPending || preview.isFetching) && !failed ? <ActivityIndicator color={colors.textSecondary} />
-          : <Pressable accessibilityRole="button" accessibilityLabel={`Retry preview for ${name}`} style={tw`min-h-11 justify-center px-1`}
-            onPress={(event) => { event.stopPropagation(); setFailedKey(null); void preview.refetch(); }}>
-            <Text style={tw.style('text-xs text-center', { color: colors.textSecondary })}>Retry preview</Text>
-          </Pressable>}
+          : <ThumbnailRetry name={name} error={preview.error} onRetry={() => { setFailedKey(null); void preview.refetch(); }} />}
       </View>}
   </View>;
 }

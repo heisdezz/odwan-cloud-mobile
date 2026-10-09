@@ -25,12 +25,14 @@ import { readBackupStatuses } from "@/db/local-store.native";
 import { backupLabel, type BackupStatus, type LocalAsset } from "@/db/schema";
 import tw from "@/lib/tw";
 import { useMediaViewer } from "@/providers/media-viewer-provider";
-import { useAssetBackupStatus, useUploadPendingCount } from "@/providers/upload-activity-provider";
+import { useAssetBackupStatus } from "@/providers/upload-activity-provider";
 import { useServerStore } from "@/stores/server-store";
 
 const assetKey = (asset: LocalAsset) => asset.id;
 const assetType = (asset: LocalAsset) => asset.mediaType;
 const EMPTY_ASSETS: LocalAsset[] = [];
+
+const dateForItem = (item: LocalAsset) => item.createdAt;
 
 const AlbumTile = memo(function AlbumTile({
   item,
@@ -65,6 +67,8 @@ const AlbumTile = memo(function AlbumTile({
       accessibilityState={selecting ? { checked: selected } : undefined}
       onPress={() => (selecting ? onToggle(item.id) : onOpen(item.id))}
       onLongPress={() => onSelect(item.id)}
+      accessibilityActions={[{ name: "select", label: "Select for upload" }]}
+      onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === "select") onSelect(item.id); }}
       style={tw.style("m-0.5 overflow-hidden", {
         width: size - 4,
         height: size - 4,
@@ -158,7 +162,7 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const viewer = useMediaViewer();
-  const pending = useUploadPendingCount();
+
   const { verifiedUrl, account, revision } = useServerStore();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -256,7 +260,7 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
   );
   return (
     <View style={tw`flex-1`}>
-      <View style={tw`shrink-0 px-4 py-1 flex-row items-center gap-2`}>
+      {selecting && <View style={tw`shrink-0 px-4 py-1 flex-row items-center gap-2`}>
         {selecting ? (
           <>
             <AlbumAction
@@ -281,21 +285,8 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
               }
             />
           </>
-        ) : (
-          <>
-            <AlbumAction
-              label="Select"
-              disabled={!assets.length}
-              onPress={() => setSelecting(true)}
-            />
-            <View style={tw`flex-1`} />
-            <AlbumAction
-              label={pending ? `Uploads (${pending})` : "Uploads"}
-              onPress={() => setSheet("queue")}
-            />
-          </>
-        )}
-      </View>
+        ) : null}
+      </View>}
       <MediaTypeFilter
         refreshing={query.isFetching}
         onRefresh={() => {
@@ -304,7 +295,7 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
       />
       <PageLoader query={query}>
         {() => (
-          <GridZoom
+          <GridZoom dateForItem={dateForItem}
             resetKey={displayedFilter}
             data={assets}
             keyExtractor={assetKey}

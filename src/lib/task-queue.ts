@@ -4,6 +4,7 @@ export function createTaskQueue(concurrency: number) {
   let active = 0;
   let paused = false;
   const pending: (() => void)[] = [];
+  const idleListeners = new Set<() => void>();
   function pump() {
     while (!paused && active < concurrency && pending.length) pending.shift()!();
   }
@@ -19,7 +20,10 @@ export function createTaskQueue(concurrency: number) {
         signal?.removeEventListener('abort', abort);
         if (signal?.aborted) { abort(); return; }
         active++;
-        Promise.resolve().then(task).then(resolve, reject).finally(() => { active--; pump(); });
+        Promise.resolve().then(task).then(resolve, reject).finally(() => {
+          active--; pump();
+          if (!active) { idleListeners.forEach((listener) => listener()); idleListeners.clear(); }
+        });
       }
       if (signal?.aborted) { abort(); return; }
       signal?.addEventListener('abort', abort, { once: true });
@@ -34,5 +38,6 @@ export function createTaskQueue(concurrency: number) {
   };
   // Started work completes normally; queued offscreen tasks remain cancellable.
   enqueue.setPaused = (next: boolean) => { paused = next; if (!paused) pump(); };
+  enqueue.whenIdle = () => active ? new Promise<void>((resolve) => idleListeners.add(resolve)) : Promise.resolve();
   return enqueue;
 }

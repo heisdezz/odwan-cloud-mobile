@@ -1,5 +1,6 @@
+import { galleryDay, galleryMonths } from '@/helpers/media-timeline';
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { ScrollView, useWindowDimensions, View, type LayoutChangeEvent, type ScrollViewProps } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type ScrollViewProps } from 'react-native';
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -19,6 +20,7 @@ type GridZoomProps<T> = {
   extraData?: unknown; contentInsets?: { top?: number; bottom?: number };
   /** Return to the top for a new filter without destroying the recycler. */
   resetKey?: string | number;
+  dateForItem?: (item: T) => string | number | undefined;
   getItemType?: (item: T, index: number) => string | number;
   onEndReached?: () => void; onEndReachedThreshold?: number;
   ListEmptyComponent?: ReactElement; ListFooterComponent?: ReactElement | null;
@@ -34,9 +36,9 @@ function GridPreviewCell<T>({ item, index, size, target, renderItem, visibility 
 const PreviewCell = memo(GridPreviewCell) as typeof GridPreviewCell;
 
 /** UI-thread scroll tracking; only cells entering/leaving the thumbnail window update. */
-export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, contentInsets, resetKey, ...props }: GridZoomProps<T>) {
+export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, contentInsets, resetKey, dateForItem, ...props }: GridZoomProps<T>) {
   const window = useWindowDimensions();
-  const { background } = useTheme();
+  const { background, text: textColor, textSecondary } = useTheme();
   const [viewport, setViewport] = useState({ width: window.width, height: window.height });
   const [interaction] = useState(() => ({ scroll: {}, pinch: {} }));
   const setPinchInteraction = useCallback((busy: boolean) => galleryInteraction.setBusy(interaction.pinch, busy), [interaction]);
@@ -51,6 +53,12 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   const size = viewport.width / columns;
   const top = contentInsets?.top ?? 0, bottom = contentInsets?.bottom ?? 0;
   const count = data.length;
+  const [dateLabel, setDateLabel] = useState(() => data[0] && dateForItem ? galleryDay(dateForItem(data[0])) : "");
+  const publishedDate = useRef(dateLabel);
+  const [datePicker, setDatePicker] = useState(false);
+  const months = useMemo(() => dateForItem ? galleryMonths(data, dateForItem) : [], [data, dateForItem]);
+  const scrubHeight = useRef(1);
+  const scrubTrackHeight = useSharedValue(1);
   const list = useRef<FlashListRef<T>>(null);
   const pending = useRef<{ columns: number; offset: number } | null>(null);
   const appliedResetKey = useRef(resetKey);
@@ -82,7 +90,14 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     Component.displayName = 'GridScrollView';
     return Component;
   }, [nativeScroll, nativeRef]);
-  const publishWindow = useCallback((next: GridRange) => updateGridVisibility(visibility, next), [visibility]);
+  const publishWindow = useCallback((next: GridRange) => {
+    updateGridVisibility(visibility, next);
+    if (dateForItem && count) {
+      const index = Math.min(count - 1, Math.max(0, Math.floor((scroll.value - top) / size) * columns));
+      const label = galleryDay(dateForItem(data[index]));
+      if (publishedDate.current !== label) { publishedDate.current = label; setDateLabel(label); }
+    }
+  }, [visibility, dateForItem, count, scroll, top, size, columns, data]);
   useAnimatedReaction(
     // Freeze preview subscriptions until the new density and focal offset agree.
     () => pinching.value || busy.value ? null : gridWindow(count, columns, viewportWidth.value, viewportHeight.value, scroll.value, top),
@@ -153,6 +168,16 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     scroll.set(offset); updateWindow(offset); scale.set(1); busy.set(false);
     setPinchInteraction(false);
   }, [resetKey, columns, scroll, updateWindow, scale, pinching, busy, setPinchInteraction]);
+  const jumpTo = useCallback((index: number) => {
+    const maxOffset = Math.max(0, Math.ceil(count / columns) * size + top + bottom - viewport.height);
+    const offset = Math.min(maxOffset, Math.max(0, Math.floor(index / columns) * size + top));
+    list.current?.scrollToOffset({ offset, animated: false });
+    scroll.set(offset); updateWindow(offset);
+  }, [columns, size, count, top, bottom, viewport.height, scroll, updateWindow]);
+  const scrubStyle = useAnimatedStyle(() => {
+    const maxOffset = Math.max(1, Math.ceil(count / columns) * size + top + bottom - viewportHeight.value);
+    return { transform: [{ translateY: Math.max(0, Math.min(1, scroll.value / maxOffset)) * Math.max(0, scrubTrackHeight.value - 48) }] };
+  });
   return <View style={rootStyle} onLayout={onLayout}>
     <GestureDetector gesture={pinch}><Animated.View style={[tw`flex-1`, previewStyle]}>
       <FlashList ref={list} {...props} data={data} keyExtractor={keyExtractor} numColumns={columns}
@@ -163,5 +188,27 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
         onMomentumScrollBegin={startScrollInteraction} onMomentumScrollEnd={endScrollInteraction}
         onLoad={onLoad} onCommitLayoutEffect={onCommitLayoutEffect} />
     </Animated.View></GestureDetector>
+    {!!months.length && <>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Jump to date. ${dateLabel}`} onPress={() => setDatePicker(true)}
+        style={tw.style('absolute top-2 left-3 min-h-11 px-3 rounded-full justify-center', { backgroundColor: background })}>
+        <Text style={tw.style('text-xs font-semibold', { color: textColor })}>{dateLabel || months[0].label}</Text>
+      </Pressable>
+      <View accessibilityRole="adjustable" accessibilityLabel="Gallery timeline" accessibilityHint="Drag to move quickly through dates"
+        style={tw`absolute top-16 right-0 bottom-28 w-8 items-center`}
+        onLayout={(event) => { scrubHeight.current = Math.max(1, event.nativeEvent.layout.height); scrubTrackHeight.set(scrubHeight.current); }}
+        onStartShouldSetResponder={() => true} onResponderGrant={(event) => { startScrollInteraction(); jumpTo(Math.floor(Math.max(0, Math.min(1, event.nativeEvent.locationY / scrubHeight.current)) * (count - 1))); }}
+        onResponderMove={(event) => jumpTo(Math.floor(Math.max(0, Math.min(1, event.nativeEvent.locationY / scrubHeight.current)) * (count - 1)))}
+        onResponderRelease={endScrollInteraction} onResponderTerminate={endScrollInteraction}>
+        <Animated.View style={[tw.style('w-1 h-12 rounded-full', { backgroundColor: textSecondary }), scrubStyle]} />
+      </View>
+      <Modal visible={datePicker} transparent animationType="fade" onRequestClose={() => setDatePicker(false)}>
+        <View style={tw`flex-1 bg-black/60 justify-center px-6`}><View style={tw.style('rounded-2xl p-5 h-2/3', { backgroundColor: background })}>
+          <Text accessibilityRole="header" style={tw.style('text-xl font-semibold pb-3', { color: textColor })}>Jump to month</Text>
+          <FlatList data={months} keyExtractor={(item) => item.key} renderItem={({ item }) => <Pressable accessibilityRole="button"
+            onPress={() => { jumpTo(item.index); setDatePicker(false); }} style={tw`min-h-12 justify-center`}><Text style={tw.style('text-base', { color: textColor })}>{item.label}</Text></Pressable>} />
+          <Pressable accessibilityRole="button" onPress={() => setDatePicker(false)} style={tw`min-h-11 justify-center`}><Text style={tw.style('text-base', { color: textColor })}>Close</Text></Pressable>
+        </View></View>
+      </Modal>
+    </>}
   </View>;
 }

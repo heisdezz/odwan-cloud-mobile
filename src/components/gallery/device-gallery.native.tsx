@@ -1,3 +1,4 @@
+import { BackupStatusCard } from '@/components/uploads/backup-status-card';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useQuery } from '@tanstack/react-query';
@@ -26,6 +27,8 @@ import { useAssetBackupStatus } from '@/providers/upload-activity-provider';
 
 const EMPTY_ASSETS: LocalAsset[] = [];
 const assetKey = (asset: LocalAsset) => asset.id;
+const dateForItem = (asset: LocalAsset) => asset.createdAt;
+
 const assetType = (asset: LocalAsset) => asset.mediaType;
 
 const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
@@ -86,6 +89,7 @@ function GalleryContent() {
     <Button label={permission.canAskAgain ? 'Allow gallery access' : 'Open app settings'} loading={requesting} onPress={() => { void grantAccess(); }} />
   </View>;
   return <View style={tw`flex-1`}>
+    <BackupStatusCard />
     <MediaTypeFilter refreshing={sync.running} onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }} />
     {!cacheReadable ? <ActivityIndicator color={colors.text} style={tw`py-4`} /> : null}
     {sync.error && <View style={tw`px-6 py-2 gap-2`}>
@@ -98,7 +102,7 @@ function GalleryContent() {
     </View>}
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     {cacheReadable && <PageLoader query={gallery}>
-      {() => <GridZoom resetKey={displayedFilter} data={assets}
+      {() => <GridZoom dateForItem={dateForItem} resetKey={displayedFilter} data={assets}
         extraData={statuses.data} keyExtractor={assetKey} getItemType={assetType}
         renderItem={renderItem}
         contentInsets={{ bottom: BottomTabInset + 24 }}

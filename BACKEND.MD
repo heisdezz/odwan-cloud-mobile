@@ -366,3 +366,20 @@ Build the initial frontend around collection browsing, album/tag organization, a
 `GET /api/media/{id}/thumb` returns an authenticated JPEG, generating it on demand when missing. It uses the stream route’s permissions and supports file tokens for browser requests. `HEAD` returns 404 for missing previews without generating them. The protected `media_item.thumbs` field stores the generated filename.
 
 Generation fits within 320×320, runs one FFmpeg worker with a 45-second deadline, and persists the JPEG. Concurrent uncached requests return 503 with `Retry-After: 2`; failed generation has a five-minute cooldown. The frontend limits concurrency and honors short retries, showing a placeholder on long cooldowns. Source changes invalidate the saved thumbnail; album/name edits preserve it. Unsupported MIME types return 415 and incomplete storage mappings return 409. The frontend caches the backend JPEG unchanged and never generates server previews locally.
+
+## Recoverable trash contract (requires companion backend deployment)
+
+The companion backend working tree now implements these authenticated routes:
+
+- `GET /api/media/capabilities`: `{ trash: true, retention_days: 30, cloud_deletion: true }`.
+- `POST /api/media/{id}/trash`: preserve the object, set `trashed_at` and `trash_expires_at` in epoch milliseconds. Repeated calls preserve the original expiry.
+- `POST /api/media/{id}/restore`: clear both fields while the recovery period remains valid.
+- `DELETE /api/media/{id}/permanent`: require a trashed record, delete it and queue cloud cleanup transactionally.
+
+Trash/restore use the collection Update rule; permanent deletion uses its Delete rule. Superusers retain their existing access. Ordinary browsing filters `trashed_at = 0`; Trash filters `trashed_at > 0`. Album counts and covers exclude trashed records. Streaming rejects trashed originals; saved previews remain usable in Trash. Explicit duplicate uploads restore the existing record.
+
+A minute worker purges up to 10 expired items per pass and processes durable cleanup jobs, with exponential retry capped at six hours. Transaction rollback cannot queue cloud deletion. Cleanup checks remaining record references and supports Telegram and S3. S3 deletion uses the saved ETag and configured bucket; it deletes the current object or adds a deletion marker for versioned buckets, whose historical versions require their own lifecycle policy.
+
+The frontend retains remote IDs when marking a local backup as trashed, allowing restoration to recover matching backup indicators. Permanent deletion clears those references. Older servers returning 404 from capabilities keep ordinary browsing and do not expose destructive trash actions. The capabilities request and trash mutations use isolated PocketBase clients tied to the current server session.
+
+The latest companion backend stores `thumbs` as a public file field; the app also supports protected-file tokens for existing installations. Source cleanup and trash routes must be deployed separately from the app's `dev` push.

@@ -1,3 +1,6 @@
+import { AlbumBrowserTools, type AlbumSort } from './album-browser-tools';
+import { AlbumActions } from './album-actions';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { pocketbaseThumbnailSource } from '@/lib/pocketbase-thumbnail';
 import { useMemo, useState } from 'react';
 import { FlashList } from '@shopify/flash-list';
@@ -19,8 +22,8 @@ import tw from '@/lib/tw';
 import { useServerStore } from '@/stores/server-store';
 import { CreateAlbumSheet } from './CreateAlbumSheet';
 
-function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
-  album: AlbumWithCover; serverUrl: string; accountId: string; previewEnabled: boolean;
+function AlbumTile({ album, serverUrl, accountId, previewEnabled, onMenu }: {
+  album: AlbumWithCover; serverUrl: string; accountId: string; previewEnabled: boolean; onMenu: (album: AlbumWithCover) => void;
 }) {
   const colors = useTheme();
   const cover = album.expand?.cover_media_id;
@@ -30,6 +33,8 @@ function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
   return <Pressable
     accessibilityRole="button"
     accessibilityLabel={`${album.name}, ${label}`}
+    onLongPress={() => onMenu(album)}
+    accessibilityHint="Hold for album actions"
     onPress={() => router.push({ pathname: '/album/[id]', params: { id: album.id } })}
     style={({ pressed }) => tw.style('flex-1 mx-2 mb-6', { opacity: pressed ? 0.7 : 1 })}>
     <View style={tw.style('w-full aspect-square rounded-2xl overflow-hidden items-center justify-center', { backgroundColor: colors.backgroundElement })}>
@@ -41,7 +46,12 @@ function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
         <MediaTileBadges video={cover.mime_type.startsWith('video/')} />
       </> : <SymbolView name={{ ios: 'rectangle.stack', android: 'photo_library', web: 'photo_library' }} size={40} tintColor={colors.textSecondary} />}
     </View>
-    <Text numberOfLines={2} style={tw.style('text-base font-semibold mt-3', { color: colors.text })}>{album.name}</Text>
+    <View style={tw`flex-row items-center mt-2`}>
+      <Text numberOfLines={2} style={tw.style('flex-1 text-base font-semibold', { color: colors.text })}>{album.name}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${album.name}`} onPress={(event) => { event.stopPropagation(); onMenu(album); }} style={tw`min-h-11 min-w-11 items-center justify-center`}>
+        <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' }} size={22} tintColor={colors.textSecondary} />
+      </Pressable>
+    </View>
     <Text style={tw.style('text-sm mt-1', { color: colors.textSecondary })}>{label}</Text>
   </Pressable>;
 }
@@ -49,7 +59,12 @@ function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
 export default function RemoteAlbums() {
   const colors = useTheme();
   const { verifiedUrl, account, revision } = useServerStore();
-  const query = useAlbums();
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<AlbumSort>("name");
+  const scope = `${verifiedUrl}:${account?.id}:${revision}`;
+  const [menu, setMenu] = useState<{ album: AlbumWithCover; scope: string } | null>(null);
+  const settledSearch = useDebouncedValue(search);
+  const query = useAlbums(settledSearch, sort);
   const [creating, setCreating] = useState(false);
   const albums = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.items) ?? []).map((album) => [album.id, album])).values()], [query.data]);
   const retry = () => {
@@ -66,6 +81,7 @@ export default function RemoteAlbums() {
         <Text style={tw.style('text-sm font-medium', { color: colors.text })}>New album</Text>
       </Pressable>
     </View>}
+    {verifiedUrl && account && <AlbumBrowserTools search={search} onSearch={setSearch} sort={sort} onSort={setSort} remote />}
     {!verifiedUrl || !account ? <View style={tw`flex-1 justify-center px-6 gap-4 pb-24`}>
       <Text style={tw.style('text-xl font-medium text-center', { color: colors.text })}>Your albums</Text>
       <Text style={tw.style('text-base text-center', { color: colors.textSecondary })}>Connect to your server and log in to browse your albums.</Text>
@@ -74,7 +90,7 @@ export default function RemoteAlbums() {
       {() => <FlashList
         key={`${verifiedUrl}:${account.id}:${revision}`}
         data={albums} numColumns={2} keyExtractor={(album) => album.id}
-        renderItem={({ item, target }) => <AlbumTile album={item} serverUrl={verifiedUrl} accountId={account.id} previewEnabled={target === 'Cell'} />}
+        renderItem={({ item, target }) => <AlbumTile album={item} serverUrl={verifiedUrl} accountId={account.id} previewEnabled={target === 'Cell'} onMenu={(album) => setMenu({ album, scope })} />}
         contentContainerStyle={tw.style('px-4 pt-1', { paddingBottom: BottomTabInset + 24 })}
         refreshing={query.isRefetching && !query.isFetchingNextPage}
         onRefresh={() => { void query.refetch(); }}
@@ -82,7 +98,7 @@ export default function RemoteAlbums() {
         onEndReachedThreshold={0.5}
         ListEmptyComponent={<View style={tw`px-6 py-20 gap-3 items-center`}>
           <SymbolView name={{ ios: 'rectangle.stack', android: 'photo_library', web: 'photo_library' }} size={40} tintColor={colors.textSecondary} />
-          <Text style={tw.style('text-xl font-medium', { color: colors.text })}>No albums yet</Text>
+          <Text style={tw.style('text-xl font-medium', { color: colors.text })}>{settledSearch ? "No matching albums" : "No albums yet"}</Text>
           <Text style={tw.style('text-base text-center', { color: colors.textSecondary })}>Albums from your server will appear here.</Text>
         </View>}
         ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator style={tw`py-6`} color={colors.text} />
@@ -92,6 +108,7 @@ export default function RemoteAlbums() {
           </View> : null}
       />}
     </PageLoader>}
+    {menu?.scope === scope && <AlbumActions key={`${scope}:${menu.album.id}`} album={menu.album} onClose={() => setMenu(null)} />}
     {creating && verifiedUrl && account && <CreateAlbumSheet key={`${verifiedUrl}:${account.id}:${revision}`} onClose={() => setCreating(false)} />}
   </View>;
 }

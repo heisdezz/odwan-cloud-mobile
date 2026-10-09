@@ -4,6 +4,7 @@ export function createThumbnailLookup(limit = 512) {
   const resident = new Map<string, string>();
   const pending = new Map<string, Promise<string>>();
   return {
+    clear() { resident.clear(); pending.clear(); },
     get(identity: string, load: () => Promise<string>): Promise<string> {
       const uri = resident.get(identity);
       if (uri) {

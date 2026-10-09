@@ -1,6 +1,7 @@
 import { useStore } from 'zustand';
 import { SymbolView } from 'expo-symbols';
 import { createMediaSelectionStore, type MediaSelectionStore } from '@/lib/media-selection';
+import { useMediaCapabilities } from '@/hooks/use-media-capabilities';
 import { useDeleteServerMedia } from '@/hooks/use-delete-server-media';
 import { ServerMediaSelectionBar, DeleteServerMediaConfirmation } from './server-media-selection';
 import { pocketbaseThumbnailSource } from '@/lib/pocketbase-thumbnail';
@@ -20,6 +21,8 @@ import { mediaName } from "@/helpers/media";
 import { useTheme } from "@/hooks/use-theme";
 import tw from "@/lib/tw";
 import type { MediaItemResponse } from "../../../pocketbase-types";
+
+const dateForItem = (item: MediaItemResponse) => item.created_at;
 
 const mediaKey = (item: MediaItemResponse) => item.id;
 const mediaInsets = { bottom: BottomTabInset + 24 };
@@ -80,6 +83,8 @@ const MediaTile = memo(function MediaTile({
       onPress={() => selecting ? selection.getState().toggle(item.id) : onPress(item.id)}
       onLongPress={() => selection.getState().start(item.id)}
       accessibilityRole={selecting ? "checkbox" : "button"}
+      accessibilityActions={[{ name: "select", label: "Select media" }]}
+      onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === "select" && !deleting) selection.getState().start(item.id); }}
       accessibilityHint={selecting ? "Toggle selection" : "Hold to select for deletion"}
       accessibilityState={{ disabled: deleting, ...(selecting ? { checked: selected } : {}) }}
       accessible
@@ -129,6 +134,7 @@ type MediaGridProps = {
   loadingMore: boolean;
   error?: unknown;
   albumId?: string;
+  trash?: boolean;
   loadViewerPage?: () => Promise<MediaItemResponse[] | undefined>;
 };
 
@@ -141,14 +147,17 @@ const MediaGridContent = memo(function MediaGridContent({
   error,
   albumId,
   loadViewerPage,
+  trash = false,
 }: MediaGridProps) {
+  const capabilities = useMediaCapabilities();
   const [selection] = useState(createMediaSelectionStore);
   const [confirmation, setConfirmation] = useState<string[] | null>(null);
   const [completed, setCompleted] = useState(0);
   const onDeleted = useCallback((ids: readonly string[]) => selection.getState().remove(ids), [selection]);
   const onProgress = useCallback((count: number) => setCompleted(count), []);
-  const deletion = useDeleteServerMedia(serverUrl, onDeleted, onProgress);
-  const deleting = deletion.isPending;
+  const deletion = useDeleteServerMedia(serverUrl, onDeleted, onProgress, trash ? "permanent" : "trash");
+  const restoration = useDeleteServerMedia(serverUrl, onDeleted, onProgress, "restore");
+  const deleting = deletion.isPending || restoration.isPending;
   const loadedIds = useMemo(() => items.map((item) => item.id), [items]);
   const mediaFilter = useGridStore((state) => state.mediaFilter);
   const colors = useTheme();
@@ -160,6 +169,7 @@ const MediaGridContent = memo(function MediaGridContent({
   const open = useCallback((id: string) => {
     const current = useServerStore.getState();
     if (!current.account || current.verifiedUrl !== serverUrl) return;
+    if (trash) { selection.getState().start(id); return; }
     viewer.open({
       items: itemsRef.current.map(remoteViewerItem),
       selectedId: id,
@@ -173,14 +183,14 @@ const MediaGridContent = memo(function MediaGridContent({
         ? async () => (await loadViewerPage())?.map(remoteViewerItem)
         : undefined,
     });
-  }, [viewer, serverUrl, albumId, loadViewerPage]);
+  }, [viewer, serverUrl, albumId, loadViewerPage, trash, selection]);
   const renderItem = useCallback(({ item, size, previewEnabled }: { item: MediaItemResponse; size: number; previewEnabled: boolean }) => (
     <MediaTile item={item} serverUrl={serverUrl} token={token} previewEnabled={previewEnabled} onPress={open} size={size} selection={selection} deleting={deleting} />
   ), [serverUrl, token, open, selection, deleting]);
   return (
     <View style={tw`flex-1`}>
-    <ServerMediaSelectionBar selection={selection} loadedIds={loadedIds} deleting={deleting} onDelete={setConfirmation} />
-    <GridZoom
+    <ServerMediaSelectionBar selection={selection} loadedIds={loadedIds} deleting={deleting} onDelete={setConfirmation} trashAvailable={capabilities.data?.trash} onRestore={trash ? (ids) => restoration.mutate(ids) : undefined} />
+    <GridZoom dateForItem={dateForItem}
       resetKey={mediaFilter}
       data={items}
       keyExtractor={mediaKey}
@@ -191,14 +201,14 @@ const MediaGridContent = memo(function MediaGridContent({
       ListEmptyComponent={
         <View style={tw`px-6 py-20 gap-3 items-center`}>
           <Text style={tw.style("text-xl font-medium", { color: colors.text })}>
-            {mediaFilter === 'all' ? 'No media yet' : `No ${mediaFilter} found`}
+            {trash ? 'Trash is empty' : mediaFilter === 'all' ? 'No media yet' : `No ${mediaFilter} found`}
           </Text>
           <Text
             style={tw.style("text-base text-center", {
               color: colors.textSecondary,
             })}
           >
-            Items from your server will appear here.
+            {trash ? "Removed items will appear here for 30 days." : "Items from your server will appear here."}
           </Text>
         </View>
       }
@@ -218,7 +228,7 @@ const MediaGridContent = memo(function MediaGridContent({
         ) : null
       }
     />
-    {confirmation && <DeleteServerMediaConfirmation count={confirmation.length} completed={completed} deleting={deleting}
+    {confirmation && <DeleteServerMediaConfirmation permanent={trash} count={confirmation.length} completed={completed} deleting={deleting}
       onCancel={() => setConfirmation(null)} onConfirm={() => {
         if (deleting) return;
         setCompleted(0);

@@ -149,3 +149,21 @@ The media viewer uses a compact filename/count header, capture date/time and dim
 Favorites persist locally in Odwan and are scoped to the device item or server/account/item. Sharing prepares the original file on demand, authenticates server downloads, and opens the system share sheet. The export stays in OS-managed cache so the recipient can read it. Web uses file sharing when available or downloads the file. Rebuild the debug APK for the newly added `expo-sharing` native module; older builds show an explanatory error when Share is tapped.
 
 Grid interaction scheduling pauses queued thumbnail generation/downloads during scrolling and pinching; cached previews remain available and started jobs finish. The pinch reservation lasts through the column-layout commit and focal scroll restoration. Hidden grids keep their current density until focused, avoiding simultaneous recycler relayouts when the persisted column preference changes.
+
+## Gallery and library controls
+
+Gallery filters use compact All / Videos / Photos controls and an icon refresh action. Hold a tile to select it; selection controls disappear when finished. The date label opens a month picker, and the right-edge handle scrubs through the loaded dates without changing the square-tile layout or remounting FlashList. Remote date navigation covers loaded pages; device galleries use their cached full list.
+
+Explore supports album search and sorting: device albums by name or item count, server albums additionally by newest. Cloud album menus offer rename, add items from a device album, and removal with media moved to Unsorted. Removing an album preserves its media. The Unsorted album cannot be renamed or removed.
+
+Backup summaries count current device versions for the connected server and show remaining items, paused queues, connection waits, and errors. Settings separates Backup, Connection, Storage, and Appearance. Editing a server URL leaves the current session intact until Test connection is pressed. System/light/dark choices persist with preferences storage.
+
+Storage shows the app's JPEG thumbnail cache size and can clear it after active thumbnail jobs finish. Queued work stays paused during clearing; previews are regenerated/downloaded on demand. Originals, SQLite backup records, and upload history remain intact. This size excludes video downloads, shared exports, and OS-managed caches.
+
+## Recoverable server trash
+
+Trash requires the backend changes in the companion `go-test` working tree to be deployed. The app probes `/api/media/capabilities` and disables trash actions on older servers. Library queries exclude trashed records on supported servers. Hold server media to move it to Trash; Settings → Trash allows restoration or permanent deletion. Device copies remain untouched.
+
+Trashed items can be recovered for 30 days. Expired items are removed in bounded background batches; permanent deletion queues durable cloud cleanup with retry/backoff. S3 cleanup validates the bucket and uses an ETag condition. Versioned S3 buckets retain historical versions according to bucket lifecycle settings. Explicitly uploading the same trashed file restores its existing record.
+
+No live trash/deletion operations are needed for testing; regression tests use temporary databases and storage stubs.

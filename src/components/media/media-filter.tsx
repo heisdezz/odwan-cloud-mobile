@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useGridStore } from "@/stores/grid-store";
@@ -18,13 +19,13 @@ export function MediaTypeFilter({
       <View
         accessibilityRole="tablist"
         accessibilityLabel="Media type"
-        style={tw`flex-1 flex-row flex-wrap gap-2`}
+        style={tw`flex-1 flex-row gap-2`}
       >
         {(
           [
             { value: "all", label: "All" },
             { value: "videos", label: "Videos" },
-            { value: "images", label: "Images" },
+            { value: "images", label: "Photos" },
           ] as const
         ).map(({ value, label }) => (
           <Pressable
@@ -58,19 +59,17 @@ export function MediaTypeFilter({
       {onRefresh && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Refresh media"
+          accessibilityLabel={refreshing ? "Updating media" : "Refresh media"}
           accessibilityState={{ disabled: refreshing }}
           disabled={refreshing}
           onPress={onRefresh}
           style={({ pressed }) =>
-            tw.style("min-h-11 px-2 justify-center", {
+            tw.style("min-h-11 min-w-11 items-center justify-center", {
               opacity: refreshing || pressed ? 0.5 : 1,
             })
           }
         >
-          <Text style={tw.style("text-sm font-medium", { color: colors.text })}>
-            {refreshing ? "Updating…" : "Refresh"}
-          </Text>
+          <SymbolView name={{ ios: "arrow.clockwise", android: "refresh", web: "refresh" }} size={20} tintColor={colors.text} />
         </Pressable>
       )}
     </View>

@@ -134,6 +134,8 @@ export const MediaItemStorageBackendOptions = {
 } as const
 export type MediaItemStorageBackendOptions = typeof MediaItemStorageBackendOptions[keyof typeof MediaItemStorageBackendOptions]
 export type MediaItemRecord = {
+  trashed_at?: number
+  trash_expires_at?: number
 	thumbs?: FileNameString
 	album_id?: RecordIdString
 	created_at: IsoAutoDateString

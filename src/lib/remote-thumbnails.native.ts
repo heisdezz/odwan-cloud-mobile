@@ -1,9 +1,10 @@
+import type { ThumbnailSource } from '@/lib/pocketbase-thumbnail';
 import { Directory, File, Paths } from 'expo-file-system';
 import { withRemoteThumbnailSource } from './remote-thumbnail-source';
 import { fetchServerThumbnail } from './server-thumbnail';
 
 /** Persist the backend's small JPEG unchanged; no original download or thumbnail generation. */
-export async function downloadServerThumbnail(source: { uri: string; headers?: Record<string, string> }, destination: File) {
+export async function downloadServerThumbnail(source: ThumbnailSource, destination: File) {
   const directory = new Directory(Paths.document, 'media-thumbnails-v1');
   directory.create({ idempotent: true, intermediates: true });
   const file = new File(directory, `${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);

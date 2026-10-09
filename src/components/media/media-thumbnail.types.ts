@@ -1,5 +1,6 @@
+import type { ThumbnailSource } from '@/lib/pocketbase-thumbnail';
 export type MediaThumbnailProps = {
-  source: { uri: string; headers?: Record<string, string> };
+  source: ThumbnailSource;
   cacheKey: readonly (string | number)[];
   name: string; video?: boolean; local?: boolean; enabled?: boolean;
 };

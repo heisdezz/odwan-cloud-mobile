@@ -1,3 +1,4 @@
+import { pocketbaseThumbnailSource } from '@/lib/pocketbase-thumbnail';
 import { memo, useCallback, useEffect, useRef } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useMediaViewer } from "@/providers/media-viewer-provider";
@@ -10,7 +11,7 @@ import { useServerStore } from "@/stores/server-store";
 import { Button } from "@/components/ui";
 import { BottomTabInset } from "@/constants/theme";
 import { extract_message } from "@/helpers/api";
-import { mediaName, mediaThumbnailUrl } from "@/helpers/media";
+import { mediaName } from "@/helpers/media";
 import { useTheme } from "@/hooks/use-theme";
 import tw from "@/lib/tw";
 import type { MediaItemResponse } from "../../../pocketbase-types";
@@ -55,16 +56,14 @@ const MediaTile = memo(function MediaTile({
     >
       {available ? (
         <MediaThumbnail
-          source={{
-            uri: mediaThumbnailUrl(serverUrl, item.id),
-            headers: { Authorization: token },
-          }}
+          source={pocketbaseThumbnailSource(serverUrl, item, token)}
           video={video}
           cacheKey={[
             "remote",
             serverUrl,
             accountId ?? "",
             item.id,
+            item.thumbs ?? "",
             item.file_hash,
             item.storage_backend,
             item.storage_bucket,

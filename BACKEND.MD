@@ -13,7 +13,7 @@ There are two API surfaces:
 | PocketBase collection API | Browsing records, albums, tags, editing library metadata, and authentication     |
 | Custom application routes | Transferring file bytes, linking uploads to records, and streaming cloud objects |
 
-Original media is stored externally; the protected PocketBase `thumbs` file field holds only its generated JPEG preview. Its paths and storage fields are strings pointing to an external object. Creating a record through the standard collection API does not upload bytes. Use the custom stream route for originals and `/api/media/{id}/thumb` for generated JPEGs. PocketBase file URLs apply only to the saved `thumbs` file.
+Original media is stored externally; the protected PocketBase `thumbs` file field holds only its generated JPEG preview. Its paths and storage fields are strings pointing to an external object. Creating a record through the standard collection API does not upload bytes. Use the custom stream route for originals. For existing JPEGs, use `pb.files.getURL(media, media.thumbs, { token })` with `pb.files.getToken()`; `/api/media/{id}/thumb` generates missing previews. PocketBase file URLs apply only to the saved `thumbs` file.
 
 Currently, the only HTTP upload route is a **test-token-authorized** route. A normal PocketBase user's auth token does not authorize it. The ordinary streaming route does support PocketBase user permissions.
 

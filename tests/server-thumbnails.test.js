@@ -6,6 +6,16 @@ const jpeg = new Uint8Array([255, 216, 255, 224, 255, 217]);
 const source = { uri: mediaThumbnailUrl('https://example.test/pb/', 'video/id'), headers: { Authorization: 'test-auth' } };
 const controller = () => new AbortController();
 
+test('native fetch bodies without web stream methods use the array buffer safely', async () => {
+  const response = {
+    ok: true, status: 200, headers: new Headers({ 'Content-Type': 'image/jpeg' }),
+    body: {}, arrayBuffer: async () => jpeg.buffer,
+  };
+  expect(await fetchServerThumbnail(source, controller().signal, () => {}, async () => response)).toEqual(jpeg);
+  await expect(fetchServerThumbnail(source, controller().signal, () => {}, async () => ({ ...response, ok: false, status: 403 })))
+    .rejects.toThrow('HTTP 403');
+});
+
 test('images and video posters fetch only the authenticated thumbnail endpoint and preserve JPEG bytes', async () => {
   let url, options;
   const signal = controller().signal;

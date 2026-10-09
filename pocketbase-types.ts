@@ -134,6 +134,7 @@ export const MediaItemStorageBackendOptions = {
 } as const
 export type MediaItemStorageBackendOptions = typeof MediaItemStorageBackendOptions[keyof typeof MediaItemStorageBackendOptions]
 export type MediaItemRecord = {
+	thumbs?: FileNameString
 	album_id?: RecordIdString
 	created_at: IsoAutoDateString
 	current_relative_path: string

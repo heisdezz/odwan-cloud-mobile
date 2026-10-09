@@ -27,11 +27,11 @@ export function MediaThumbnail(props: MediaThumbnailProps) {
 function ServerThumbnail({ source, cacheKey, name, video }: MediaThumbnailProps) {
   const colors = useTheme();
   const revision = useServerStore((state) => state.revision);
-  const identity = JSON.stringify([...cacheKey, revision, 'backend-thumb-v1']);
+  const identity = JSON.stringify([...cacheKey, revision, 'pocketbase-thumb-v2']);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [object, setObject] = useState<{ bytes: Uint8Array; uri: string } | null>(null);
   const preview = useQuery({
-    queryKey: ['media-thumbnail', ...cacheKey, revision, 'backend-thumb-v1'],
+    queryKey: ['media-thumbnail', ...cacheKey, revision, 'pocketbase-thumb-v2'],
     queryFn: ({ signal }) => enqueue(() => withRemoteThumbnailSource({
       download: (downloadSignal, progress) => fetchServerThumbnail(source, downloadSignal, progress),
       publish: async (bytes) => bytes, cleanup: () => {},

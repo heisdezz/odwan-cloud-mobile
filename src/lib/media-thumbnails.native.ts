@@ -1,3 +1,4 @@
+import type { ThumbnailSource } from '@/lib/pocketbase-thumbnail';
 import { Image } from 'expo-image';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -43,10 +44,10 @@ async function saveImage(image: Exclude<Parameters<typeof ImageManipulator.manip
   }
 }
 
-export async function getMediaThumbnail(source: { uri: string; headers?: Record<string, string> }, cacheKey: readonly (string | number)[], video: boolean, signal: AbortSignal) {
+export async function getMediaThumbnail(source: ThumbnailSource, cacheKey: readonly (string | number)[], video: boolean, signal: AbortSignal) {
   const local = cacheKey[0] === 'local';
   // Backend JPEGs must not reuse old client-generated server previews.
-  const identity = thumbnailIdentity(local ? cacheKey : [...cacheKey, 'backend-thumb-v1']);
+  const identity = thumbnailIdentity(local ? cacheKey : [...cacheKey, 'pocketbase-thumb-v2']);
   return lookup.get(identity, async () => {
     const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, identity);
     const enqueue = local ? queues.local : queues.remote;

@@ -1,10 +1,9 @@
 import { File } from 'expo-file-system';
-import { fetch } from 'expo/fetch';
 import { loadDeviceMediaByIds, resolveDeviceMediaUri } from './device-media.native';
-import { sendUpload } from './upload-api';
-import { UploadError, type UploadJob } from './upload-types';
+import { sendUploadWithProgress } from './upload-request';
+import { UploadError, type UploadJob, type UploadProgress } from './upload-types';
 
-export async function uploadDeviceFile(job: UploadJob, token: string, signal: AbortSignal, sending: () => void) {
+export async function uploadDeviceFile(job: UploadJob, token: string, signal: AbortSignal, sending: () => void, onProgress: (progress: UploadProgress) => void) {
   const [current] = await loadDeviceMediaByIds([job.asset.id]);
   if (!current || current.modifiedAt !== job.asset.modifiedAt)
     throw new UploadError('This item changed or was removed. Select the current item again.', 400);
@@ -15,8 +14,8 @@ export async function uploadDeviceFile(job: UploadJob, token: string, signal: Ab
   // Reserve multipart overhead below the backend's 256 MiB request limit.
   if (file.size > 255 * 1024 * 1024) throw new UploadError('This file exceeds the 255 MiB upload limit.', 413);
   const body = new FormData();
-  body.append('file', file, job.asset.filename);
+  // RN accepts URI descriptors and streams them natively, avoiding a whole-file JS blob.
+  body.append('file', { uri, name: job.asset.filename, type: file.type || 'application/octet-stream' } as unknown as Blob);
   sending();
-  // The native File remains a blob reference; never read whole videos into JS memory.
-  return sendUpload({ serverUrl: job.serverUrl, testToken: token, objectKey: job.objectKey, body, signal }, fetch as typeof globalThis.fetch);
+  return sendUploadWithProgress({ serverUrl: job.serverUrl, testToken: token, objectKey: job.objectKey, body, signal, onProgress });
 }

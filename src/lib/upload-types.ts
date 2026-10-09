@@ -13,6 +13,7 @@ export type UploadJob = BackupScope & {
 export type UploadHistoryItem = UploadJob & { completedAt: number };
 export type UploadDestination = { id: string; name: string };
 export type UploadPhase = { id: string; phase: 'preparing' | 'sending' | 'organizing' } | null;
+export type UploadProgress = { loaded: number; total: number | null; percent: number | null };
 export class UploadError extends Error {
   constructor(message: string, public status = 0) { super(message); }
 }

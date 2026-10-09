@@ -10,6 +10,27 @@ import { useUploadQueue } from '@/providers/upload-queue-context';
 import tw from '@/lib/tw';
 import { saveUploadToken } from '@/lib/upload-token';
 import { useServerStore } from '@/stores/server-store';
+import { useStore } from 'zustand';
+import { uploadProgressStore } from '@/stores/upload-progress-store';
+import { uploadProgressLabel } from '@/lib/upload-progress';
+import type { UploadJob, UploadPhase } from '@/lib/upload-types';
+
+function UploadJobStatus({ job, phase }: { job: UploadJob; phase: UploadPhase }) {
+  const colors = useTheme();
+  const sending = phase?.id === job.id && phase.phase === 'sending';
+  const progress = useStore(uploadProgressStore, (state) => sending && state.id === job.id ? state.progress : null);
+  const label = progress ? uploadProgressLabel(progress) : phase?.id === job.id
+    ? ({ preparing: 'Preparing original…', sending: 'Starting transfer…', organizing: 'Adding to album…' })[phase.phase]
+    : job.state === 'queued' ? 'Queued' : job.state === 'error' ? 'Failed' : 'Uploading…';
+  return <View style={tw`gap-2`}>
+    <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{job.albumName} · {label}</Text>
+    {progress?.percent != null && <View accessibilityRole="progressbar" accessibilityLabel={`Upload of ${job.asset.filename}`}
+      accessibilityValue={{ min: 0, max: 100, now: progress.percent, text: progress.percent === 100 ? 'File sent. Saving to cloud.' : `${progress.percent} percent sent` }}
+      style={tw.style('h-1.5 rounded-full overflow-hidden', { backgroundColor: colors.backgroundElement })}>
+      <View style={tw.style('h-full rounded-full', { width: `${progress.percent}%`, backgroundColor: colors.primary })} />
+    </View>}
+  </View>;
+}
 
 export function UploadQueueContent(props: { onClose?: () => void }) {
   const scope = useServerStore((state) => `${state.verifiedUrl}:${state.account?.id}:${state.revision}`);
@@ -46,8 +67,7 @@ function QueueContent({ onClose }: { onClose?: () => void }) {
       ListEmptyComponent={<Text style={tw.style('py-10 text-base text-center', { color: colors.textSecondary })}>{account ? 'No pending uploads. Select items in a device album to start.' : 'Connect and log in to see your upload queue.'}</Text>}
       renderItem={({ item }) => <View style={tw.style('py-4 gap-2', { borderBottomWidth: 1, borderColor: colors.outline })}>
         <Text numberOfLines={2} style={tw.style('text-base font-medium', { color: colors.text })}>{item.asset.filename}</Text>
-        <Text style={tw.style('text-sm', { color: colors.textSecondary })}>{item.albumName} · {queue.phase?.id === item.id ? ({ preparing: 'Preparing original…', sending: 'Sending / storing in cloud…', organizing: 'Adding to album…' })[queue.phase.phase] :
-          item.state === 'queued' ? 'Queued' : item.state === 'error' ? 'Failed' : 'Uploading…'}</Text>
+        <UploadJobStatus job={item} phase={queue.phase} />
         {item.error && <Text accessibilityRole="alert" style={tw.style('text-sm', { color: colors.error })}>{item.result ? 'File stored; album assignment needs retry. ' : ''}{item.error}</Text>}
         {['queued', 'error'].includes(item.state) && <Button label="Remove from queue" variant="text" onPress={() => action(queue.remove(item.id))} />}
       </View>}

@@ -21,6 +21,7 @@ import { uploadScopeKey, useUploadPreferences } from '@/stores/upload-preference
 import { UploadQueueContext } from './upload-queue-context';
 import { UploadActivityProvider } from './upload-activity-provider';
 import { galleryInteraction } from '@/lib/gallery-interaction';
+import { uploadProgressStore } from '@/stores/upload-progress-store';
 
 // Recover interrupted entries once per JS runtime, rather than on every mount/focus.
 let recovery: Promise<void> | undefined;
@@ -76,7 +77,23 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
       void updateUploadNotification(`Preparing ${job.asset.filename}`).catch(() => {});
       const token = await readUploadToken(job.serverUrl);
       if (!token) throw new UploadError('Enter the upload token in the upload sheet, then retry.', 401);
-      return uploadDeviceFile(job, token, signal, () => { setPhase({ id: job.id, phase: 'sending' }); void updateUploadNotification(`Sending / storing ${job.asset.filename}`).catch(() => {}); });
+      let notifiedAt = -Infinity;
+      let notifiedPercent: number | null | undefined;
+      return uploadDeviceFile(job, token, signal, () => {
+        uploadProgressStore.start(job.id);
+        setPhase({ id: job.id, phase: 'sending' });
+        void updateUploadNotification(`Sending ${job.asset.filename}`).catch(() => {});
+      }, (progress) => {
+        if (signal.aborted) return;
+        uploadProgressStore.update(job.id, progress);
+        const now = Date.now();
+        if (now - notifiedAt >= 1000 || (progress.percent === 100 && notifiedPercent !== 100)) {
+          notifiedAt = now; notifiedPercent = progress.percent;
+          const description = progress.percent === 100 ? `Saving to cloud · ${job.asset.filename}`
+            : `${progress.percent === null ? 'Sending' : `${progress.percent}% uploaded`} · ${job.asset.filename}`;
+          void updateUploadNotification(description, progress.percent).catch(() => {});
+        }
+      });
     },
     organize: async (job, result, signal) => {
       setPhase({ id: job.id, phase: 'organizing' });
@@ -103,7 +120,7 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
       const previous = await readBackupStatuses([job.asset], job);
       if (previous[job.asset.id] !== 'backed_up') await recordBackupStatus(job.asset, job, state, undefined, error);
     },
-    changed: () => { setPhase(null); changed(); },
+    changed: () => { uploadProgressStore.clear(); setPhase(null); changed(); },
     connectionLost: (job) => {
       const key = uploadScopeKey(job);
       setRetryState((state) => ({ scopeKey: key, attempt: state.scopeKey === key ? state.attempt + 1 : 1, waiting: true }));

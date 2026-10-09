@@ -7,6 +7,11 @@ const service: typeof BackgroundService | null = Platform.OS === 'android' && Na
 export const backgroundUploadsAvailable = !!service;
 export const backgroundUploadsRunning = () => service?.isRunning() ?? false;
 let permissionRequested = false;
+type UploadNotice = { description: string; percent?: number | null };
+let latest: UploadNotice | null = null;
+let updating: Promise<void> | null = null;
+const noticeOptions = ({ description, percent }: UploadNotice) => ({ taskDesc: description,
+  progressBar: { max: 100, value: percent ?? 0, indeterminate: percent == null } });
 
 export async function startUploadBackground() {
   if (!service || service.isRunning()) return;
@@ -34,10 +39,26 @@ export async function startUploadBackground() {
     await Promise.race([ready, new Promise<never>((_, reject) => {
       timeout = setTimeout(() => reject(new Error('Background upload service did not start.')), 5000);
     })]);
+    if (latest) await updateUploadNotification(latest.description, latest.percent);
   } catch (error) { await service.stop(); throw error; }
   finally { if (timeout) clearTimeout(timeout); }
 }
-export async function stopUploadBackground() { if (service?.isRunning()) await service.stop(); }
-export async function updateUploadNotification(description: string) {
-  if (service?.isRunning()) await service.updateNotification({ taskDesc: description });
+export async function stopUploadBackground() {
+  latest = null;
+  await updating?.catch(() => {});
+  if (service?.isRunning()) await service.stop();
+}
+export async function updateUploadNotification(description: string, percent?: number | null) {
+  latest = { description, percent };
+  if (!service?.isRunning()) return;
+  if (!updating) {
+    updating = (async () => {
+      while (latest && service.isRunning()) {
+        const notice: UploadNotice = latest;
+        await service.updateNotification(noticeOptions(notice));
+        if (latest === notice) break;
+      }
+    })().finally(() => { updating = null; });
+  }
+  await updating;
 }

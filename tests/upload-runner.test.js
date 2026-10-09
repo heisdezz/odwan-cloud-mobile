@@ -23,15 +23,29 @@ test('start and stop surround one worker; repeated wakeups cannot overlap native
   expect(events[0]).toBe('start'); expect(events.at(-1)).toBe('stop');
   expect(events.filter((event) => event === 'start').length).toBe(1);
 });
-test('pausing during native startup prevents the file transfer and releases the service', async () => {
-  const starting = deferred(); let begun = false, stopped = 0, uploads = 0;
+test('pausing during native startup cancels the foreground transfer and releases the service', async () => {
+  const starting = deferred(), sending = deferred(); let begun = false, stopped = 0, uploads = 0;
   const runner = createUploadRunner({ canRun: () => true, hasPending: async () => true,
-    worker: { wake: async () => { uploads++; }, stop: () => {} }, background: {
+    worker: { wake: async () => { uploads++; await sending.promise; }, stop: () => sending.resolve() }, background: {
       start: async () => { begun = true; await starting.promise; }, stop: async () => { stopped++; },
     }, onBackgroundError: () => {} });
-  const task = runner.wake(); while (!begun) await Promise.resolve();
+  const task = runner.wake(); while (!begun || !uploads) await Promise.resolve();
   runner.stop(); starting.resolve(); await task;
-  expect(uploads).toBe(0); expect(stopped).toBe(1);
+  expect(uploads).toBe(1); expect(stopped).toBe(1);
+});
+
+test('foreground files begin while background service startup is still pending', async () => {
+  const starting = deferred(), sending = deferred(); const events = [];
+  const runner = createUploadRunner({ canRun: () => true, hasPending: async () => true,
+    worker: { wake: async () => { events.push('sending'); await sending.promise; }, stop: () => sending.resolve() },
+    background: { start: async () => { events.push('starting'); await starting.promise; events.push('ready'); },
+      stop: async () => { events.push('stopped'); } }, onBackgroundError: () => {} });
+  const task = runner.wake(); while (!events.includes('sending')) await Promise.resolve();
+  expect(events).toEqual(['starting', 'sending']);
+  sending.resolve(); await Promise.resolve();
+  expect(events).not.toContain('stopped');
+  starting.resolve(); await task;
+  expect(events.at(-1)).toBe('stopped');
 });
 test('a service failure falls back only while the app is still allowed to run', async () => {
   let allowed = true, uploads = 0, errors = 0;

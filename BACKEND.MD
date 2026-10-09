@@ -13,7 +13,7 @@ There are two API surfaces:
 | PocketBase collection API | Browsing records, albums, tags, editing library metadata, and authentication     |
 | Custom application routes | Transferring file bytes, linking uploads to records, and streaming cloud objects |
 
-A `media_item` record has **no PocketBase file field**. Its paths and storage fields are strings pointing to an external object. Creating a record through the standard collection API does not upload bytes. `pb.files.getURL(record, filename)` and PocketBase thumbnail URLs do not apply to these media objects.
+Original media is stored externally; the protected PocketBase `thumbs` file field holds only its generated JPEG preview. Its paths and storage fields are strings pointing to an external object. Creating a record through the standard collection API does not upload bytes. Use the custom stream route for originals and `/api/media/{id}/thumb` for generated JPEGs. PocketBase file URLs apply only to the saved `thumbs` file.
 
 Currently, the only HTTP upload route is a **test-token-authorized** route. A normal PocketBase user's auth token does not authorize it. The ordinary streaming route does support PocketBase user permissions.
 
@@ -316,7 +316,7 @@ This cookie is SameSite and path-scoped. The shipped viewer is designed for the 
 | Deleting a media record does not delete Telegram/S3 objects         | “Delete from library” is accurate; “Delete cloud file permanently” is not implemented |
 | Album rename/path edits do not move cloud objects                   | Present them as library organization, not physical storage operations                 |
 
-When moving a media record between albums, updating `album_id` is sufficient. The server adjusts both album counts. Album covers use `cover_media_id`; fetch that media record and use its authorized stream URL for an image cover where appropriate. There is no automatic video-poster generation.
+When moving a media record between albums, updating `album_id` is sufficient. The server adjusts both album counts. Album covers use `cover_media_id`; fetch that media record and use its authorized stream URL for an image cover where appropriate. The backend generates photo/video JPEG previews through `/api/media/{id}/thumb`.
 
 ## 7. Errors and empty states
 
@@ -343,7 +343,7 @@ These are implementation gaps, not hidden dashboard features:
 
 - A normal-user upload endpoint authorized by PocketBase rules, with an explicit album/record contract. The current route uses one shared test token and `tests/` keys.
 - Cloud-upload progress/job endpoints, a browser resume protocol, and a remote cleanup API.
-- Automatic metadata extraction, useful duration values, image dimensions, and video thumbnails/posters.
+- Automatic metadata extraction, useful duration values, and image dimensions.
 - Automatic tag counts and library statistics. Their fields exist, but the current hooks maintain **album counts only**.
 - Remote object deletion and cloud moves/renames tied to library actions.
 - A server-info/storage-settings API and a download/sync/migration workflow. `ServerInfo`, `SyncProgress`, `SyncStatus`, and `SavedServer` in `models.ts` do not establish implemented server endpoints.
@@ -360,3 +360,9 @@ Build the initial frontend around collection browsing, album/tag organization, a
 - [Collection creation and upgrades](init/base_app.go)
 - [Album hooks](init/album.go)
 - [Frontend model declarations](models.ts)
+
+## Backend thumbnails
+
+`GET /api/media/{id}/thumb` returns an authenticated JPEG, generating it on demand when missing. It uses the stream route’s permissions and supports file tokens for browser requests. `HEAD` returns 404 for missing previews without generating them. The protected `media_item.thumbs` field stores the generated filename.
+
+Generation fits within 320×320, runs one FFmpeg worker with a 45-second deadline, and persists the JPEG. Concurrent uncached requests return 503 with `Retry-After: 2`; failed generation has a five-minute cooldown. The frontend limits concurrency and honors short retries, showing a placeholder on long cooldowns. Source changes invalidate the saved thumbnail; album/name edits preserve it. Unsupported MIME types return 415 and incomplete storage mappings return 409. The frontend caches the backend JPEG unchanged and never generates server previews locally.

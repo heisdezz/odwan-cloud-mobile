@@ -5,8 +5,8 @@ import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
 import { createThumbnailQueues } from './thumbnail-queues';
 import { createPersistentThumbnailCache } from './persistent-thumbnail-cache';
 import { createThumbnailLookup } from './thumbnail-lookup';
-import { generateDeviceThumbnail, generateFileVideoThumbnail } from './device-thumbnails.native';
-import { withRemoteThumbnailFile } from './remote-thumbnails.native';
+import { generateDeviceThumbnail } from './device-thumbnails.native';
+import { downloadServerThumbnail } from './remote-thumbnails.native';
 import { galleryInteraction } from './gallery-interaction';
 import { generateVideoThumbnail } from './video-thumbnails.native';
 import { thumbnailDimensions, thumbnailIdentity, THUMBNAIL_QUALITY } from '@/helpers/thumbnail';
@@ -44,9 +44,11 @@ async function saveImage(image: Exclude<Parameters<typeof ImageManipulator.manip
 }
 
 export async function getMediaThumbnail(source: { uri: string; headers?: Record<string, string> }, cacheKey: readonly (string | number)[], video: boolean, signal: AbortSignal) {
-  return lookup.get(thumbnailIdentity(cacheKey), async () => {
-    const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, thumbnailIdentity(cacheKey));
-    const local = cacheKey[0] === 'local';
+  const local = cacheKey[0] === 'local';
+  // Backend JPEGs must not reuse old client-generated server previews.
+  const identity = thumbnailIdentity(local ? cacheKey : [...cacheKey, 'backend-thumb-v1']);
+  return lookup.get(identity, async () => {
+    const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, identity);
     const enqueue = local ? queues.local : queues.remote;
     return getCached(key, () => enqueue(async () => {
       // Once decoding starts, finish and persist even if the cell scrolls offscreen.
@@ -55,17 +57,7 @@ export async function getMediaThumbnail(source: { uri: string; headers?: Record<
         const generated = await generateDeviceThumbnail(source.uri, String(cacheKey[1]), video, fileFor(key).uri);
         if (generated) return generated;
       }
-      if (!local) return withRemoteThumbnailFile(source, async (file) => {
-        if (video) {
-          const generated = await generateFileVideoThumbnail(file.uri, fileFor(key).uri);
-          if (generated) return generated;
-          // Older APKs/iOS decode a local file only, never an HTTP video source.
-          return generateVideoThumbnail({ uri: file.uri, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
-        }
-        const image = await Image.loadAsync({ uri: file.uri }, { maxWidth: 256, maxHeight: 256 });
-        try { return await saveImage(image, key); }
-        finally { image.release(); }
-      });
+      if (!local) return downloadServerThumbnail(source, fileFor(key));
       if (video) return generateVideoThumbnail({ ...source, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
       const image = await Image.loadAsync(source, { maxWidth: 256, maxHeight: 256 });
       try { return await saveImage(image, key); }

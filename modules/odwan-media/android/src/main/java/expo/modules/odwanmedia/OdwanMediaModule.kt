@@ -2,7 +2,6 @@ package expo.modules.odwanmedia
 
 import android.content.ContentUris
 import android.graphics.Bitmap
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -21,30 +20,6 @@ import kotlin.math.roundToInt
 class OdwanMediaModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OdwanMedia")
-
-    // HTTP is downloaded separately with cancellation. Only private cache files
-    // reach the retriever, and parsing/encoding never runs on Expo's shared queue.
-    AsyncFunction("generateFileVideoThumbnail") Coroutine { source: String, destinationUri: String ->
-      withContext(Dispatchers.IO) {
-        val uri = Uri.parse(source)
-        require(uri.scheme == "file") { "Video thumbnail decoding requires a local file." }
-        val input = File(requireNotNull(uri.path)).canonicalFile
-        val sources = File(appContext.cacheDirectory, "thumbnail-sources").canonicalFile
-        require(input.parentFile == sources && input.isFile) { "Invalid video thumbnail source." }
-        val retriever = MediaMetadataRetriever()
-        var bitmap: Bitmap? = null
-        try {
-          retriever.setDataSource(input.path)
-          bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1)
-            retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 256, 256)
-          else retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-          publishThumbnail(requireNotNull(bitmap) { "No video preview could be generated." }, destinationUri)
-        } finally {
-          bitmap?.recycle()
-          retriever.release()
-        }
-      }
-    }
 
     // Decode, resize and publish on I/O workers, without transferring bitmap pixels to JS.
     AsyncFunction("generateThumbnail") Coroutine { source: String, assetId: String, video: Boolean, destinationUri: String ->

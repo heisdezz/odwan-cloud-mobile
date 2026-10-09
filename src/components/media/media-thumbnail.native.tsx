@@ -7,6 +7,7 @@ import { useServerStore } from '@/stores/server-store';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import type { MediaThumbnailProps } from './media-thumbnail.types';
+import { retryServerThumbnail, serverThumbnailRetryDelay } from '@/lib/server-thumbnail';
 
 export function MediaThumbnail(props: MediaThumbnailProps) {
   const colors = useTheme();
@@ -21,14 +22,17 @@ function ActiveThumbnail({ source, cacheKey, name, video = false }: MediaThumbna
   const colors = useTheme();
   // Login changes remote authorization, not device thumbnail identity or observers.
   const revision = useServerStore((state) => cacheKey[0] === 'remote' ? state.revision : 0);
-  const identity = JSON.stringify(cacheKey);
-  const failureKey = JSON.stringify([cacheKey, revision]);
+  const backend = cacheKey[0] === 'remote' ? ['backend-thumb-v1'] : [];
+  const identity = JSON.stringify([...cacheKey, ...backend]);
+  const failureKey = JSON.stringify([identity, revision]);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   // A recycled row must not inherit a different media item's preview error.
   const failed = failedKey === failureKey;
-  const preview = useQuery({ queryKey: ['media-thumbnail', ...cacheKey, revision],
+  const preview = useQuery({ queryKey: ['media-thumbnail', ...cacheKey, revision, ...backend],
     queryFn: ({ signal }) => getMediaThumbnail(source, cacheKey, video, signal),
-    staleTime: Infinity, gcTime: 30_000, retry: false,
+    staleTime: Infinity, gcTime: 30_000,
+    retry: cacheKey[0] === 'remote' ? retryServerThumbnail : false,
+    retryDelay: serverThumbnailRetryDelay,
     // Disk hits must work offline. Network misses fail normally and offer retry.
     networkMode: 'always',
   });

@@ -18,3 +18,7 @@ export function mediaAspectRatio(metadata?: string): number {
 export function mediaStreamUrl(serverUrl: string, id: string): string {
   return `${serverUrl.replace(/\/+$/, '')}/api/media/${encodeURIComponent(id)}/stream`;
 }
+
+export function mediaThumbnailUrl(serverUrl: string, id: string): string {
+  return `${serverUrl.replace(/\/+$/, '')}/api/media/${encodeURIComponent(id)}/thumb`;
+}

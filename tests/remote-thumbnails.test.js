@@ -8,7 +8,7 @@ test('decoding begins only after a full download, and cleanup waits until the JP
   const download = deferred(), decode = deferred(); const events = [];
   const preview = withRemoteThumbnailSource({
     download: async () => { events.push('downloading'); return download.promise; },
-    decode: async (file) => { expect(file).toBe('file:///private-cache/original'); events.push('decoding'); await decode.promise; events.push('saved'); return 'file:///preview.jpg'; },
+    publish: async (file) => { expect(file).toBe('file:///private-cache/original'); events.push('decoding'); await decode.promise; events.push('saved'); return 'file:///preview.jpg'; },
     cleanup: () => events.push('cleaned'),
   });
   await Promise.resolve(); expect(events).toEqual(['downloading']);
@@ -25,30 +25,30 @@ test('a stalled download is cancelled and cleaned up without entering the video 
     download: (signal) => new Promise((resolve, reject) => {
       signal.addEventListener('abort', () => { aborted = true; reject(new Error('Download cancelled')); }, { once: true });
     }),
-    decode: async () => { decoded = true; }, cleanup: () => { cleaned = true; },
+    publish: async () => { decoded = true; }, cleanup: () => { cleaned = true; },
   }, { timeoutMs: 5, maxBytes: 100 });
   await expect(preview).rejects.toThrow('timed out');
   expect(aborted).toBe(true); expect(decoded).toBe(false); expect(cleaned).toBe(true);
 });
 
-test('oversized originals are cancelled with or without a content length', async () => {
+test('oversized previews are cancelled with or without a content length', async () => {
   for (const [written, total] of [[1, 101], [101, -1]]) {
     let aborted = false, cleaned = false, decoded = false;
     const preview = withRemoteThumbnailSource({
       download: async (signal, progress) => { progress(written, total); aborted = signal.aborted; return 'file:///oversized'; },
-      decode: async () => { decoded = true; }, cleanup: () => { cleaned = true; },
+      publish: async () => { decoded = true; }, cleanup: () => { cleaned = true; },
     }, { timeoutMs: 100, maxBytes: 100 });
-    await expect(preview).rejects.toThrow('too large');
+    await expect(preview).rejects.toThrow('exceeds');
     expect(aborted).toBe(true); expect(cleaned).toBe(true); expect(decoded).toBe(false);
   }
 });
 
-test('download and decoder errors clean up originals without pretending a thumbnail exists', async () => {
+test('download and publication errors clean up temporary files without pretending a thumbnail exists', async () => {
   let cleaned = 0;
   await expect(withRemoteThumbnailSource({ download: async () => { throw new Error('HTTP 401'); },
-    decode: async () => 'never', cleanup: () => { cleaned++; } })).rejects.toThrow('HTTP 401');
+    publish: async () => 'never', cleanup: () => { cleaned++; } })).rejects.toThrow('HTTP 401');
   await expect(withRemoteThumbnailSource({ download: async () => 'file:///original',
-    decode: async () => { throw new Error('Unsupported codec'); }, cleanup: () => { cleaned++; } })).rejects.toThrow('Unsupported codec');
+    publish: async () => { throw new Error('Unsupported codec'); }, cleanup: () => { cleaned++; } })).rejects.toThrow('Unsupported codec');
   expect(cleaned).toBe(2);
 });
 

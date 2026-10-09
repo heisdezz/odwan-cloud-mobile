@@ -11,7 +11,7 @@ import { MediaTileBadges } from '@/components/media/media-tile-badges';
 import { Button } from '@/components/ui';
 import { BottomTabInset } from '@/constants/theme';
 import { extract_message } from '@/helpers/api';
-import { mediaName, mediaStreamUrl } from '@/helpers/media';
+import { mediaName, mediaThumbnailUrl } from '@/helpers/media';
 import { useAlbums, type AlbumWithCover } from '@/hooks/use-albums';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
@@ -34,7 +34,7 @@ function AlbumTile({ album, serverUrl, accountId, previewEnabled }: {
     <View style={tw.style('w-full aspect-square rounded-2xl overflow-hidden items-center justify-center', { backgroundColor: colors.backgroundElement })}>
       {cover && available ? <>
         <MediaThumbnail
-          source={{ uri: mediaStreamUrl(serverUrl, cover.id), headers: { Authorization: pb.authStore.token } }}
+          source={{ uri: mediaThumbnailUrl(serverUrl, cover.id), headers: { Authorization: pb.authStore.token } }}
           cacheKey={['remote', serverUrl, accountId, cover.id, cover.file_hash, cover.storage_backend, cover.storage_bucket, cover.storage_key, cover.storage_etag ?? '', cover.file_size ?? 0]}
           name={mediaName(cover)} video={cover.mime_type.startsWith('video/')} enabled={previewEnabled} />
         <MediaTileBadges video={cover.mime_type.startsWith('video/')} />

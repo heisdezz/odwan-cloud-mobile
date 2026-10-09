@@ -10,7 +10,7 @@ import { useServerStore } from "@/stores/server-store";
 import { Button } from "@/components/ui";
 import { BottomTabInset } from "@/constants/theme";
 import { extract_message } from "@/helpers/api";
-import { mediaName, mediaStreamUrl } from "@/helpers/media";
+import { mediaName, mediaThumbnailUrl } from "@/helpers/media";
 import { useTheme } from "@/hooks/use-theme";
 import tw from "@/lib/tw";
 import type { MediaItemResponse } from "../../../pocketbase-types";
@@ -53,7 +53,7 @@ const MediaTile = memo(function MediaTile({
       {available ? (
         <MediaThumbnail
           source={{
-            uri: mediaStreamUrl(serverUrl, item.id),
+            uri: mediaThumbnailUrl(serverUrl, item.id),
             headers: { Authorization: token },
           }}
           video={video}

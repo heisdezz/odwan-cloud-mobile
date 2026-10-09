@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { createMediaItemsSelector } from "@/helpers/media-pages";
+import { useCallback, useMemo } from "react";
 import { router } from "expo-router";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,10 +17,21 @@ export default function HomeScreen() {
   const colors = useTheme();
   const { verifiedUrl, account } = useServerStore();
   const query = useMediaItems();
-  const items = useMemo(() => {
-    const records = query.data?.pages.flatMap((page) => page.items) ?? [];
-    return [...new Map(records.map((item) => [item.id, item])).values()];
-  }, [query.data]);
+  const selectItems = useMemo(() => createMediaItemsSelector(), []);
+  const items = useMemo(() => selectItems(query.data?.pages), [selectItems, query.data?.pages]);
+  const { fetchNextPage, refetch, hasNextPage, isFetching, isFetchNextPageError, isRefetchError } = query;
+  const refresh = useCallback(() => { if (!isFetching) void refetch(); }, [isFetching, refetch]);
+  const loadMore = useCallback(() => {
+    if (isFetching) return;
+    if (isFetchNextPageError || hasNextPage) void fetchNextPage();
+    else if (isRefetchError) void refetch();
+  }, [isFetching, isFetchNextPageError, hasNextPage, isRefetchError, fetchNextPage, refetch]);
+  const loadViewerPage = useCallback(async () => {
+    if (!hasNextPage) return undefined;
+    const result = await fetchNextPage();
+    if (result.isError) throw result.error;
+    return result.data?.pages.flatMap((page) => page.items);
+  }, [hasNextPage, fetchNextPage]);
   return (
     <SafeAreaView
       edges={["top"]}
@@ -55,25 +67,15 @@ export default function HomeScreen() {
         </View>
       ) : (
         <View style={tw`flex-1`}>
-          <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />
+          <MediaTypeFilter refreshing={query.isFetching} onRefresh={refresh} />
         <PageLoader query={query}>
           {() => (
             <MediaGrid
               items={items}
               serverUrl={verifiedUrl}
               token={pb.authStore.token}
-              onLoadMore={() => {
-                if (query.isFetching) return;
-                if (query.isFetchNextPageError || query.hasNextPage)
-                  void query.fetchNextPage();
-                else if (query.isRefetchError) void query.refetch();
-              }}
-              loadViewerPage={async () => {
-                if (!query.hasNextPage) return undefined;
-                const result = await query.fetchNextPage();
-                if (result.isError) throw result.error;
-                return result.data?.pages.flatMap((page) => page.items);
-              }}
+              onLoadMore={loadMore}
+              loadViewerPage={loadViewerPage}
               loadingMore={query.isFetchingNextPage}
               error={query.error}
             />

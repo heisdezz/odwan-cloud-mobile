@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useMediaViewer } from "@/providers/media-viewer-provider";
 import { remoteViewerItem } from "@/helpers/media-viewer";
@@ -14,6 +14,9 @@ import { mediaName, mediaThumbnailUrl } from "@/helpers/media";
 import { useTheme } from "@/hooks/use-theme";
 import tw from "@/lib/tw";
 import type { MediaItemResponse } from "../../../pocketbase-types";
+
+const mediaKey = (item: MediaItemResponse) => item.id;
+const mediaInsets = { bottom: BottomTabInset + 24 };
 
 const MediaTile = memo(function MediaTile({
   item,
@@ -107,7 +110,7 @@ type MediaGridProps = {
   loadViewerPage?: () => Promise<MediaItemResponse[] | undefined>;
 };
 
-export function MediaGrid({
+export const MediaGrid = memo(function MediaGrid({
   items,
   serverUrl,
   token,
@@ -124,7 +127,7 @@ export function MediaGrid({
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
-  const open = (id: string) => {
+  const open = useCallback((id: string) => {
     const current = useServerStore.getState();
     if (!current.account || current.verifiedUrl !== serverUrl) return;
     viewer.open({
@@ -140,23 +143,17 @@ export function MediaGrid({
         ? async () => (await loadViewerPage())?.map(remoteViewerItem)
         : undefined,
     });
-  };
+  }, [viewer, serverUrl, albumId, loadViewerPage]);
+  const renderItem = useCallback(({ item, size, previewEnabled }: { item: MediaItemResponse; size: number; previewEnabled: boolean }) => (
+    <MediaTile item={item} serverUrl={serverUrl} token={token} previewEnabled={previewEnabled} onPress={open} size={size} />
+  ), [serverUrl, token, open]);
   return (
     <GridZoom
-      key={mediaFilter}
+      resetKey={mediaFilter}
       data={items}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item, size, previewEnabled }) => (
-        <MediaTile
-          item={item}
-          serverUrl={serverUrl}
-          token={token}
-          previewEnabled={previewEnabled}
-          onPress={open}
-          size={size}
-        />
-      )}
-      contentInsets={{ bottom: BottomTabInset + 24 }}
+      keyExtractor={mediaKey}
+      renderItem={renderItem}
+      contentInsets={mediaInsets}
       onEndReached={onLoadMore}
       onEndReachedThreshold={0.5}
       ListEmptyComponent={
@@ -190,4 +187,4 @@ export function MediaGrid({
       }
     />
   );
-}
+});

@@ -17,9 +17,7 @@ import { Button } from "@/components/ui";
 import { extract_message } from "@/helpers/api";
 import { localViewerItem } from "@/helpers/media-viewer";
 import { useTheme } from "@/hooks/use-theme";
-import {
-  loadDeviceAlbums,
-} from "@/lib/device-albums.native";
+import { loadDeviceAlbums } from "@/lib/device-albums.native";
 import { useDeviceAlbumAssets } from "@/hooks/use-device-album-assets.native";
 import { readBackupStatuses } from "@/db/local-store.native";
 import { backupLabel, type BackupStatus, type LocalAsset } from "@/db/schema";
@@ -68,7 +66,9 @@ const AlbumTile = memo(function AlbumTile({
       onPress={() => (selecting ? onToggle(item.id) : onOpen(item.id))}
       onLongPress={() => onSelect(item.id)}
       accessibilityActions={[{ name: "select", label: "Select for upload" }]}
-      onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === "select") onSelect(item.id); }}
+      onAccessibilityAction={({ nativeEvent }) => {
+        if (nativeEvent.actionName === "select") onSelect(item.id);
+      }}
       style={tw.style("m-0.5 overflow-hidden", {
         width: size - 4,
         height: size - 4,
@@ -121,15 +121,15 @@ const AlbumTile = memo(function AlbumTile({
   );
 });
 
-/** Keep toolbar actions in Yoga so native control measurement cannot expand this row. */
+/** Compact controls share the floating gallery toolbar. */
 function AlbumAction({
-  label,
-  accessibilityLabel = label,
+  accessibilityLabel,
+  icon,
   onPress,
   disabled = false,
 }: {
-  label: string;
-  accessibilityLabel?: string;
+  accessibilityLabel: string;
+  icon: React.ComponentProps<typeof SymbolView>["name"];
   onPress: () => void;
   disabled?: boolean;
 }) {
@@ -143,7 +143,7 @@ function AlbumAction({
       onPress={onPress}
       style={({ pressed }) =>
         tw.style(
-          "min-h-11 shrink-0 px-3 rounded-full items-center justify-center",
+          "h-11 w-11 rounded-full items-center justify-center",
           {
             backgroundColor: colors.backgroundElement,
             opacity: disabled ? 0.38 : pressed ? 0.7 : 1,
@@ -151,9 +151,7 @@ function AlbumAction({
         )
       }
     >
-      <Text style={tw.style("text-sm font-medium", { color: colors.text })}>
-        {label}
-      </Text>
+      <SymbolView name={icon} size={23} tintColor={colors.text} />
     </Pressable>
   );
 }
@@ -259,50 +257,18 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
     [selecting, selected, statuses, toggle, open, select],
   );
   return (
-    <View style={tw`flex-1`}>
-      {selecting && <View style={tw`shrink-0 px-4 py-1 flex-row items-center gap-2`}>
-        {selecting ? (
-          <>
-            <AlbumAction
-              label="Done"
-              accessibilityLabel="Exit selection mode"
-              onPress={cancel}
-            />
-            <Text
-              accessibilityLiveRegion="polite"
-              numberOfLines={1}
-              style={tw.style("flex-1 text-base font-medium", {
-                color: colors.text,
-              })}
-            >
-              {selectedAssets.length} selected
-            </Text>
-            <AlbumAction
-              label="All"
-              accessibilityLabel="Select all filtered media"
-              onPress={() =>
-                setSelected(new Set(assets.map((asset) => asset.id)))
-              }
-            />
-          </>
-        ) : null}
-      </View>}
-      <MediaTypeFilter
-        refreshing={query.isFetching}
-        onRefresh={() => {
-          void query.refetch();
-        }}
-      />
+    <View style={tw`flex-1 mt-2`}>
       <PageLoader query={query}>
         {() => (
-          <GridZoom dateForItem={dateForItem}
+          <GridZoom
+            dateForItem={dateForItem}
             resetKey={displayedFilter}
             data={assets}
             keyExtractor={assetKey}
             getItemType={assetType}
             renderItem={renderItem}
             extraData={selected}
-            contentInsets={{ bottom: selecting ? 100 + insets.bottom : 24 }}
+            contentInsets={{ bottom: 100 + insets.bottom }}
             ListEmptyComponent={
               <Text
                 style={tw.style("px-6 py-16 text-base text-center", {
@@ -336,20 +302,21 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
           />
         )}
       </PageLoader>
-      {selecting && (
-        <View
-          style={tw.style("absolute bottom-0 left-0 right-0 px-6 pt-3", {
-            paddingBottom: Math.max(12, insets.bottom),
-            backgroundColor: colors.background,
-          })}
-        >
-          <Button
-            label={`Upload ${selectedAssets.length} ${selectedAssets.length === 1 ? "item" : "items"}`}
-            disabled={!selectedAssets.length}
-            onPress={() => setSheet("destination")}
-          />
+      <View pointerEvents="box-none" style={tw.style('absolute left-3 right-3 items-center z-30', { bottom: Math.max(12, insets.bottom) })}>
+        <View style={tw.style('w-full max-w-md rounded-full px-2 py-1', {
+          backgroundColor: colors.backgroundElement, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 8,
+        })}>
+          {selecting ? <View style={tw`flex-row items-center`}>
+            <AlbumAction accessibilityLabel="Exit selection mode" icon={{ ios: 'xmark', android: 'close', web: 'close' }} onPress={cancel} />
+            <Text accessibilityLiveRegion="polite" accessibilityLabel={`${selectedAssets.length} selected`} numberOfLines={1}
+              style={tw.style('flex-1 text-base font-semibold px-2', { color: colors.text })}>{selectedAssets.length}</Text>
+            <AlbumAction accessibilityLabel="Select all filtered media" icon={{ ios: 'checkmark.circle', android: 'select_all', web: 'select_all' }}
+              disabled={!assets.length} onPress={() => setSelected(new Set(assets.map((asset) => asset.id)))} />
+            <AlbumAction accessibilityLabel={`Upload ${selectedAssets.length} selected items`} icon={{ ios: 'icloud.and.arrow.up', android: 'cloud_upload', web: 'cloud_upload' }}
+              disabled={!selectedAssets.length} onPress={() => setSheet('destination')} />
+          </View> : <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />}
         </View>
-      )}
+      </View>
       {sheet === "destination" && (
         <UploadDestinationSheet
           key={`${verifiedUrl}:${account?.id}:${revision}`}

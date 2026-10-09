@@ -9,8 +9,11 @@ import { withRemoteThumbnailSource } from '@/lib/remote-thumbnail-source';
 import { fetchServerThumbnail, retryServerThumbnail, serverThumbnailRetryDelay } from '@/lib/server-thumbnail';
 import tw from '@/lib/tw';
 import type { MediaThumbnailProps } from './media-thumbnail.types';
+import { galleryInteraction } from '@/lib/gallery-interaction';
 
 const enqueue = createTaskQueue(1);
+enqueue.setPaused(galleryInteraction.isBusy());
+galleryInteraction.subscribe(() => enqueue.setPaused(galleryInteraction.isBusy()));
 
 export function MediaThumbnail(props: MediaThumbnailProps) {
   const colors = useTheme();

@@ -30,4 +30,6 @@ export function createGridStore(storage: StateStorage) {
 }
 
 const gridStore = createGridStore(preferencesStorage);
+export const readGridColumns = () => gridStore.getState().columns;
+export const subscribeGridColumns = (listener: () => void) => gridStore.subscribe(listener);
 export const useGridStore = <T,>(selector: (state: GridState) => T) => useStore(gridStore, selector);

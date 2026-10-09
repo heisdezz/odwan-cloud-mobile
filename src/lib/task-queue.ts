@@ -2,9 +2,10 @@
 export function createTaskQueue(concurrency: number) {
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('Concurrency must be a positive integer.');
   let active = 0;
+  let paused = false;
   const pending: (() => void)[] = [];
   function pump() {
-    while (active < concurrency && pending.length) pending.shift()!();
+    while (!paused && active < concurrency && pending.length) pending.shift()!();
   }
   function enqueue<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -31,5 +32,7 @@ export function createTaskQueue(concurrency: number) {
     concurrency = next;
     pump();
   };
+  // Started work completes normally; queued offscreen tasks remain cancellable.
+  enqueue.setPaused = (next: boolean) => { paused = next; if (!paused) pump(); };
   return enqueue;
 }

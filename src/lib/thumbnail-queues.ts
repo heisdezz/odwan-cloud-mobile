@@ -1,8 +1,10 @@
 import { createTaskQueue } from './task-queue';
 
-/** Slow server originals never consume the slots reserved for device thumbnails. */
+/** Keep new thumbnail work out of active gestures while allowing cache hits. */
 export function createThumbnailQueues() {
   const local = createTaskQueue(2);
   const remote = createTaskQueue(1);
-  return { local, remote, setBusy: (busy: boolean) => local.setConcurrency(busy ? 1 : 2) };
+  return { local, remote, setBusy: (busy: boolean) => {
+    local.setPaused(busy); remote.setPaused(busy);
+  } };
 }

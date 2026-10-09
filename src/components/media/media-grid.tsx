@@ -53,6 +53,27 @@ const MediaTile = memo(function MediaTile({
     !!item.storage_backend &&
     !!item.storage_bucket &&
     !!item.storage_key;
+  const thumbnail = useMemo(() => (
+    <MediaThumbnail
+      source={pocketbaseThumbnailSource(serverUrl, item, token)}
+      video={video}
+      cacheKey={[
+        "remote",
+        serverUrl,
+        accountId ?? "",
+        item.id,
+        item.thumbs ?? "",
+        item.file_hash,
+        item.storage_backend,
+        item.storage_bucket,
+        item.storage_key,
+        item.storage_etag ?? "",
+        item.file_size ?? 0,
+      ]}
+      name={mediaName(item)}
+      enabled={previewEnabled}
+    />
+  ), [item, serverUrl, token, video, accountId, previewEnabled]);
   return (
     <Pressable
       disabled={deleting}
@@ -70,25 +91,7 @@ const MediaTile = memo(function MediaTile({
       })}
     >
       {available ? (
-        <MediaThumbnail
-          source={pocketbaseThumbnailSource(serverUrl, item, token)}
-          video={video}
-          cacheKey={[
-            "remote",
-            serverUrl,
-            accountId ?? "",
-            item.id,
-            item.thumbs ?? "",
-            item.file_hash,
-            item.storage_backend,
-            item.storage_bucket,
-            item.storage_key,
-            item.storage_etag ?? "",
-            item.file_size ?? 0,
-          ]}
-          name={mediaName(item)}
-          enabled={previewEnabled}
-        />
+        thumbnail
       ) : (
         <View style={tw`flex-1 items-center justify-center px-3 gap-2`}>
           <Text

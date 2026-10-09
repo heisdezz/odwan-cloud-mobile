@@ -10,6 +10,8 @@ import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { useGridStore } from '@/stores/grid-store';
 import { galleryInteraction } from '@/lib/gallery-interaction';
+import { useFocusedGridColumns } from '@/hooks/use-focused-grid-columns';
+import { useFocusEffect } from 'expo-router';
 
 type RenderGridItem<T> = (props: { item: T; index: number; size: number; previewEnabled: boolean }) => ReactElement | null;
 type GridZoomProps<T> = {
@@ -43,7 +45,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   useEffect(() => () => {
     galleryInteraction.release(interaction.scroll); galleryInteraction.release(interaction.pinch);
   }, [interaction]);
-  const savedColumns = useGridStore((state) => state.columns);
+  const savedColumns = useFocusedGridColumns();
   const setColumns = useGridStore((state) => state.setColumns);
   const columns = savedColumns ?? clampColumns(Math.floor(window.width / 150));
   const size = viewport.width / columns;
@@ -59,6 +61,11 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   const scale = useSharedValue(1), startScroll = useSharedValue(0);
   const focalX = useSharedValue(0), focalY = useSharedValue(0), pinching = useSharedValue(false), busy = useSharedValue(false);
   const viewportWidth = useSharedValue(viewport.width), viewportHeight = useSharedValue(viewport.height);
+  useFocusEffect(useCallback(() => () => {
+    pending.current = null;
+    pinching.set(false); busy.set(false); scale.set(1);
+    galleryInteraction.release(interaction.scroll); galleryInteraction.release(interaction.pinch);
+  }, [pinching, busy, scale, interaction]));
   useEffect(() => { viewportWidth.set(viewport.width); viewportHeight.set(viewport.height); }, [viewport.width, viewport.height, viewportWidth, viewportHeight]);
   const nativeScroll = useMemo(() => Gesture.Native(), []);
   const ScrollComponent = useMemo(() => {
@@ -77,9 +84,10 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   }, [nativeScroll, nativeRef]);
   const publishWindow = useCallback((next: GridRange) => updateGridVisibility(visibility, next), [visibility]);
   useAnimatedReaction(
-    () => gridWindow(count, columns, viewportWidth.value, viewportHeight.value, scroll.value, top),
+    // Freeze preview subscriptions until the new density and focal offset agree.
+    () => pinching.value || busy.value ? null : gridWindow(count, columns, viewportWidth.value, viewportHeight.value, scroll.value, top),
     (next, previous) => {
-      if (!previous || next.first !== previous.first || next.last !== previous.last) runOnJS(publishWindow)(next);
+      if (next && (!previous || next.first !== previous.first || next.last !== previous.last)) runOnJS(publishWindow)(next);
     }, [count, columns, top, publishWindow],
   );
   const updateWindow = useCallback((offset: number) => {
@@ -87,10 +95,10 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
   }, [count, columns, viewport.width, viewport.height, top, publishWindow]);
   const commitPinch = useCallback((amount: number, x: number, y: number, offset: number) => {
     const target = gridPinchTarget({ count, columns, scale: amount, width: viewport.width, height: viewport.height, offset, x, y, top, bottom });
-    if (target.columns === columns) { scale.set(withTiming(1, { duration: 160 })); busy.set(false); return; }
+    if (target.columns === columns) { scale.set(withTiming(1, { duration: 160 })); busy.set(false); setPinchInteraction(false); return; }
     pending.current = target;
     setColumns(target.columns);
-  }, [count, columns, viewport.width, viewport.height, top, bottom, scale, busy, setColumns]);
+  }, [count, columns, viewport.width, viewport.height, top, bottom, scale, busy, setColumns, setPinchInteraction]);
   const pinch = useMemo(() => Gesture.Pinch().enabled(count > 0)
     .simultaneousWithExternalGesture(nativeScroll)
     .onStart((event) => {
@@ -110,8 +118,10 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     })
     .onFinalize((_event, success) => {
       pinching.set(false);
-      runOnJS(setPinchInteraction)(false);
-      if (!success) { scale.set(withTiming(1, { duration: 160 })); busy.set(false); }
+      if (!success) {
+        runOnJS(setPinchInteraction)(false);
+        scale.set(withTiming(1, { duration: 160 })); busy.set(false);
+      }
     }), [count, columns, nativeScroll, commitPinch, setPinchInteraction, scale, focalX, focalY, startScroll, scroll, busy, pinching]);
   const previewStyle = useAnimatedStyle(() => ({ transform: [
     { translateX: (focalX.value - viewportWidth.value / 2) * (1 - scale.value) },
@@ -141,6 +151,7 @@ export function GridZoom<T>({ data, renderItem, keyExtractor, extraData, content
     pending.current = null;
     list.current?.scrollToOffset({ offset, animated: false });
     scroll.set(offset); updateWindow(offset); scale.set(1); busy.set(false);
+    setPinchInteraction(false);
   }, [resetKey, columns, scroll, updateWindow, scale, pinching, busy, setPinchInteraction]);
   return <View style={rootStyle} onLayout={onLayout}>
     <GestureDetector gesture={pinch}><Animated.View style={[tw`flex-1`, previewStyle]}>

@@ -52,14 +52,18 @@ test('download and publication errors clean up temporary files without pretendin
   expect(cleaned).toBe(2);
 });
 
-test('a stalled server preview cannot consume device slots, even during grid interaction', async () => {
+test('a stalled server preview cannot consume device slots after grid interaction', async () => {
   const queues = createThumbnailQueues(), server = deferred(); let local = 0, remote = 0;
   const first = queues.remote(async () => { remote++; await server.promise; });
   const controller = new AbortController();
   const offscreen = queues.remote(async () => { remote++; }, controller.signal);
   queues.setBusy(true);
-  await queues.local(async () => { local++; });
-  expect(local).toBe(1); expect(remote).toBe(1);
+  const device = queues.local(async () => { local++; });
+  await Promise.resolve();
+  expect(local).toBe(0); expect(remote).toBe(1);
+  queues.setBusy(false);
+  await device;
+  expect(local).toBe(1);
   controller.abort(); await expect(offscreen).rejects.toThrow('cancelled');
   server.resolve(); await first;
   await queues.remote(async () => { remote++; });

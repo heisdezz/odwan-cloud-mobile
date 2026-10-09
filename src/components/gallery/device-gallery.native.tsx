@@ -1,3 +1,10 @@
+import { useStore } from 'zustand';
+import { SymbolView } from 'expo-symbols';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createMediaSelectionStore, type MediaSelectionStore } from '@/lib/media-selection';
+import { DeviceGallerySelection } from './device-gallery-selection';
+import { UploadDestinationSheet } from '@/components/uploads/upload-destination-sheet';
+import { UploadQueueSheet } from '@/components/uploads/upload-queue-sheet';
 import { BackupStatusCard } from '@/components/uploads/backup-status-card';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -31,10 +38,18 @@ const dateForItem = (asset: LocalAsset) => asset.createdAt;
 
 const assetType = (asset: LocalAsset) => asset.mediaType;
 
-const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, previewEnabled, onPress, size }: { asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
+const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, previewEnabled, onPress, size, selection }: { selection: MediaSelectionStore; asset: LocalAsset; status?: BackupStatus; previewEnabled: boolean; onPress: (id: string) => void; size: number }) {
   const colors = useTheme();
   const status = useAssetBackupStatus(asset, savedStatus);
-  return <Pressable onPress={() => onPress(asset.id)} accessibilityRole="button" accessible accessibilityLabel={`${asset.mediaType === 'video' ? 'Video' : 'Photo'}: ${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
+  const selecting = useStore(selection, (state) => state.selecting);
+  const selected = useStore(selection, (state) => state.selected.has(asset.id));
+  return <Pressable onPress={() => selecting ? selection.getState().toggle(asset.id) : onPress(asset.id)}
+    onLongPress={() => selection.getState().start(asset.id)}
+    accessibilityRole={selecting ? 'checkbox' : 'button'}
+    accessibilityState={selecting ? { checked: selected } : undefined}
+    accessibilityHint={selecting ? 'Toggle selection' : 'Hold to select for upload'}
+    accessibilityActions={[{ name: 'select', label: 'Select for upload' }]}
+    onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === 'select') selection.getState().start(asset.id); }} accessible accessibilityLabel={`${asset.mediaType === 'video' ? 'Video' : 'Photo'}: ${asset.filename}. ${backupLabel(status)}`} style={tw.style('m-0.5 overflow-hidden', {
     width: size - 4, height: size - 4,
     backgroundColor: colors.backgroundElement,
   })}>
@@ -44,14 +59,22 @@ const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, prev
         <Text numberOfLines={2} style={tw.style('text-xs text-center', { color: colors.textSecondary })}>{asset.filename}</Text>
       </View>}
     <MediaTileBadges video={asset.mediaType === 'video'} showBackup status={status} />
+    {selected && <View pointerEvents="none" style={tw.style('absolute inset-0 border-2', { borderColor: colors.primary })} />}
+    {selecting && <View pointerEvents="none" style={tw.style('absolute top-1 left-1 h-6 w-6 rounded-full border items-center justify-center', { backgroundColor: selected ? colors.primary : '#00000088', borderColor: 'white' })}>
+      {selected && <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={16} tintColor={colors.onPrimary} />}
+    </View>}
   </Pressable>;
 });
 
 function GalleryContent() {
+  const insets = useSafeAreaInsets();
+  const [selection] = useState(createMediaSelectionStore);
+  const [uploadAssets, setUploadAssets] = useState<LocalAsset[]>([]);
+  const [sheet, setSheet] = useState<'destination' | 'queue' | null>(null);
   const colors = useTheme();
   const { permission, requestPermission, refresh, allowed, cacheReadable, database, sync } = useGallerySync();
   const [requesting, setRequesting] = useState(false);
-  const { verifiedUrl, account } = useServerStore();
+  const { verifiedUrl, account, revision } = useServerStore();
   const gallery = useQuery({
     queryKey: ['device-gallery', 'all'], enabled: cacheReadable && database.isSuccess,
     queryFn: readFullGallery, networkMode: 'always', staleTime: Infinity,
@@ -61,6 +84,13 @@ function GalleryContent() {
   const displayedFilter = useDeferredValue(mediaFilter);
   const indexedAssets = useMemo(() => indexMediaFilters(allAssets, assetType), [allAssets]);
   const assets = indexedAssets[displayedFilter];
+  const filteredIds = useMemo(() => assets.map((asset) => asset.id), [assets]);
+  const upload = useCallback((ids: readonly string[]) => {
+    const selected = new Set(ids);
+    const available = allAssets.filter((asset) => selected.has(asset.id));
+    if (!available.length) { toast.error('Selected media is no longer available.'); return; }
+    setUploadAssets(available); setSheet('destination');
+  }, [allAssets]);
   const viewer = useMediaViewer();
   const assetsRef = useRef(assets);
   useEffect(() => { assetsRef.current = assets; }, [assets]);
@@ -71,8 +101,8 @@ function GalleryContent() {
     enabled: cacheReadable && database.isSuccess && assets.length > 0,
   });
   const renderItem = useCallback(({ item, size, previewEnabled }: { item: LocalAsset; size: number; previewEnabled: boolean }) =>
-    <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} />,
-  [statuses.data, open]);
+    <GalleryTile asset={item} status={statuses.data?.[item.id]} previewEnabled={previewEnabled} onPress={open} size={size} selection={selection} />,
+  [statuses.data, open, selection]);
   async function grantAccess() {
     setRequesting(true);
     try {
@@ -105,7 +135,7 @@ function GalleryContent() {
       {() => <GridZoom dateForItem={dateForItem} resetKey={displayedFilter} data={assets}
         extraData={statuses.data} keyExtractor={assetKey} getItemType={assetType}
         renderItem={renderItem}
-        contentInsets={{ bottom: BottomTabInset + 24 }}
+        contentInsets={{ bottom: BottomTabInset + Math.max(insets.bottom, 12) + 80 }}
         ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : displayedFilter === 'all' ? 'No photos or videos are accessible.' : `No ${displayedFilter} are accessible.`}</Text>}
         ListFooterComponent={gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
@@ -113,6 +143,10 @@ function GalleryContent() {
         </View> : null}
       />}
     </PageLoader>}
+    {cacheReadable && <DeviceGallerySelection selection={selection} ids={filteredIds} bottom={BottomTabInset + Math.max(insets.bottom, 12)} onUpload={upload} />}
+    {cacheReadable && sheet === 'destination' && <UploadDestinationSheet key={`${verifiedUrl}:${account?.id}:${revision}`}
+      assets={uploadAssets} albumName="" onClose={() => setSheet(null)} onQueued={() => { selection.getState().clear(); setUploadAssets([]); setSheet('queue'); }} />}
+    {sheet === 'queue' && <UploadQueueSheet onClose={() => setSheet(null)} />}
   </View>;
 }
 

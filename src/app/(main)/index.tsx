@@ -1,4 +1,4 @@
-import { BackupStatusCard } from '@/components/uploads/backup-status-card';
+import { BackupStatusCard } from "@/components/uploads/backup-status-card";
 import { createMediaItemsSelector } from "@/helpers/media-pages";
 import { useCallback, useMemo } from "react";
 import { router } from "expo-router";
@@ -19,14 +19,33 @@ export default function HomeScreen() {
   const { verifiedUrl, account } = useServerStore();
   const query = useMediaItems();
   const selectItems = useMemo(() => createMediaItemsSelector(), []);
-  const items = useMemo(() => selectItems(query.data?.pages), [selectItems, query.data?.pages]);
-  const { fetchNextPage, refetch, hasNextPage, isFetching, isFetchNextPageError, isRefetchError } = query;
-  const refresh = useCallback(() => { if (!isFetching) void refetch(); }, [isFetching, refetch]);
+  const items = useMemo(
+    () => selectItems(query.data?.pages),
+    [selectItems, query.data?.pages],
+  );
+  const {
+    fetchNextPage,
+    refetch,
+    hasNextPage,
+    isFetching,
+    isFetchNextPageError,
+    isRefetchError,
+  } = query;
+  const refresh = useCallback(() => {
+    if (!isFetching) void refetch();
+  }, [isFetching, refetch]);
   const loadMore = useCallback(() => {
     if (isFetching) return;
     if (isFetchNextPageError || hasNextPage) void fetchNextPage();
     else if (isRefetchError) void refetch();
-  }, [isFetching, isFetchNextPageError, hasNextPage, isRefetchError, fetchNextPage, refetch]);
+  }, [
+    isFetching,
+    isFetchNextPageError,
+    hasNextPage,
+    isRefetchError,
+    fetchNextPage,
+    refetch,
+  ]);
   const loadViewerPage = useCallback(async () => {
     if (!hasNextPage) return undefined;
     const result = await fetchNextPage();
@@ -38,13 +57,10 @@ export default function HomeScreen() {
       edges={["top"]}
       style={tw.style("flex-1", { backgroundColor: colors.background })}
     >
-      <Text
-        style={tw.style("text-3xl font-semibold px-6 pt-6 pb-4", {
-          color: colors.text,
-        })}
-      >
-        Photos
-      </Text>
+      <View style={tw`px-4 pt-2 pb-2 flex-row items-center gap-3`}>
+        <Text style={tw.style('flex-1 text-2xl font-semibold', { color: colors.text })}>Photos</Text>
+        {!!verifiedUrl && !!account && <BackupStatusCard compact />}
+      </View>
       {!verifiedUrl || !account ? (
         <View style={tw`flex-1 justify-center px-6 gap-4 pb-24`}>
           <Text
@@ -68,21 +84,20 @@ export default function HomeScreen() {
         </View>
       ) : (
         <View style={tw`flex-1`}>
-          <BackupStatusCard />
           <MediaTypeFilter refreshing={query.isFetching} onRefresh={refresh} />
-        <PageLoader query={query}>
-          {() => (
-            <MediaGrid
-              items={items}
-              serverUrl={verifiedUrl}
-              token={pb.authStore.token}
-              onLoadMore={loadMore}
-              loadViewerPage={loadViewerPage}
-              loadingMore={query.isFetchingNextPage}
-              error={query.error}
-            />
-          )}
-        </PageLoader>
+          <PageLoader query={query}>
+            {() => (
+              <MediaGrid
+                items={items}
+                serverUrl={verifiedUrl}
+                token={pb.authStore.token}
+                onLoadMore={loadMore}
+                loadViewerPage={loadViewerPage}
+                loadingMore={query.isFetchingNextPage}
+                error={query.error}
+              />
+            )}
+          </PageLoader>
         </View>
       )}
     </SafeAreaView>

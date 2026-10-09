@@ -19,7 +19,8 @@ export function MediaThumbnail(props: MediaThumbnailProps) {
 
 function ActiveThumbnail({ source, cacheKey, name, video = false }: MediaThumbnailProps) {
   const colors = useTheme();
-  const revision = useServerStore((state) => state.revision);
+  // Login changes remote authorization, not device thumbnail identity or observers.
+  const revision = useServerStore((state) => cacheKey[0] === 'remote' ? state.revision : 0);
   const identity = JSON.stringify(cacheKey);
   const failureKey = JSON.stringify([cacheKey, revision]);
   const [failedKey, setFailedKey] = useState<string | null>(null);

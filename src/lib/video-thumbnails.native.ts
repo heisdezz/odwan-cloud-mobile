@@ -4,6 +4,9 @@ import { createTaskQueue } from './task-queue';
 const enqueue = createTaskQueue(2);
 
 export function generateVideoThumbnail<T>(source: VideoSource, signal: AbortSignal, consume: (frame: VideoThumbnail) => Promise<T>) {
+  const uri = typeof source === 'string' ? source : typeof source === 'object' && source ? source.uri : undefined;
+  if (uri && /^https?:\/\//i.test(uri))
+    return Promise.reject<T>(new Error('Download server video previews before decoding them.'));
   return enqueue(async () => {
     if (signal.aborted) throw new Error('Thumbnail request cancelled.');
     const player = createVideoPlayer(null);

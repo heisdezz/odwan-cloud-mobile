@@ -2,18 +2,20 @@ import { Image } from 'expo-image';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Directory, File, Paths } from 'expo-file-system';
 import { digestStringAsync, CryptoDigestAlgorithm } from 'expo-crypto';
-import { createTaskQueue } from './task-queue';
+import { createThumbnailQueues } from './thumbnail-queues';
 import { createPersistentThumbnailCache } from './persistent-thumbnail-cache';
 import { createThumbnailLookup } from './thumbnail-lookup';
-import { generateDeviceThumbnail } from './device-thumbnails.native';
+import { generateDeviceThumbnail, generateFileVideoThumbnail } from './device-thumbnails.native';
+import { withRemoteThumbnailFile } from './remote-thumbnails.native';
 import { galleryInteraction } from './gallery-interaction';
 import { generateVideoThumbnail } from './video-thumbnails.native';
 import { thumbnailDimensions, thumbnailIdentity, THUMBNAIL_QUALITY } from '@/helpers/thumbnail';
 
 const directory = () => new Directory(Paths.document, 'media-thumbnails-v1');
 const fileFor = (key: string) => new File(directory(), `${key}.jpg`);
-const enqueue = createTaskQueue(galleryInteraction.isBusy() ? 1 : 2);
-galleryInteraction.subscribe(() => enqueue.setConcurrency(galleryInteraction.isBusy() ? 1 : 2));
+const queues = createThumbnailQueues();
+queues.setBusy(galleryInteraction.isBusy());
+galleryInteraction.subscribe(() => queues.setBusy(galleryInteraction.isBusy()));
 const lookup = createThumbnailLookup();
 const getCached = createPersistentThumbnailCache({
   read: async (key) => { const file = fileFor(key); return file.exists && file.size > 0 ? file.uri : undefined; },
@@ -44,13 +46,26 @@ async function saveImage(image: Exclude<Parameters<typeof ImageManipulator.manip
 export async function getMediaThumbnail(source: { uri: string; headers?: Record<string, string> }, cacheKey: readonly (string | number)[], video: boolean, signal: AbortSignal) {
   return lookup.get(thumbnailIdentity(cacheKey), async () => {
     const key = await digestStringAsync(CryptoDigestAlgorithm.SHA256, thumbnailIdentity(cacheKey));
+    const local = cacheKey[0] === 'local';
+    const enqueue = local ? queues.local : queues.remote;
     return getCached(key, () => enqueue(async () => {
       // Once decoding starts, finish and persist even if the cell scrolls offscreen.
       // The queue still cancels work that hasn't started yet.
-      if (cacheKey[0] === 'local') {
+      if (local) {
         const generated = await generateDeviceThumbnail(source.uri, String(cacheKey[1]), video, fileFor(key).uri);
         if (generated) return generated;
       }
+      if (!local) return withRemoteThumbnailFile(source, async (file) => {
+        if (video) {
+          const generated = await generateFileVideoThumbnail(file.uri, fileFor(key).uri);
+          if (generated) return generated;
+          // Older APKs/iOS decode a local file only, never an HTTP video source.
+          return generateVideoThumbnail({ uri: file.uri, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
+        }
+        const image = await Image.loadAsync({ uri: file.uri }, { maxWidth: 256, maxHeight: 256 });
+        try { return await saveImage(image, key); }
+        finally { image.release(); }
+      });
       if (video) return generateVideoThumbnail({ ...source, useCaching: false }, new AbortController().signal, (frame) => saveImage(frame, key));
       const image = await Image.loadAsync(source, { maxWidth: 256, maxHeight: 256 });
       try { return await saveImage(image, key); }

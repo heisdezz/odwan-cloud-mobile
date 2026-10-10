@@ -1,8 +1,9 @@
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { clearServerQueries } from '@/lib/server-query-cache';
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Redirect, router } from "expo-router";
-import { KeyboardAvoidingView, Platform, ScrollView, Text } from "react-native";
+import { View, Text } from "react-native";
 import { toast } from "sonner-native";
 import { authenticateSuperuser } from "@/lib/authenticate-superuser";
 import { Button, Input } from "@/components/ui";
@@ -31,11 +32,10 @@ export default function LoginScreen() {
   if (!verifiedUrl) return <Redirect href="/settings" />;
   const submit = () => login.mutate();
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <View
       style={tw.style("flex-1", { backgroundColor: colors.background })}
     >
-      <ScrollView
+      <KeyboardAwareScrollView bottomOffset={24}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={tw`px-6 py-8 gap-6`}
       >
@@ -78,7 +78,7 @@ export default function LoginScreen() {
           disabled={!email.trim() || !password}
           onPress={submit}
         />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }

@@ -7,6 +7,7 @@ import { JellyTabBarHeadless, type TabsIconProps, type TabsItem } from 'react-na
 
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
+import { useSelectionNavigation } from '@/hooks/use-selection-navigation';
 
 type TabBarProps = Pick<ReturnType<typeof useTabsWithTriggers>, 'state' | 'navigation'>;
 
@@ -22,7 +23,7 @@ function ActiveHomeIcon(props: TabsIconProps) {
   return (
     <View style={tw`flex-row items-center gap-1`}>
       <HomeIcon {...props} />
-      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Home</Text>
+      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Cloud</Text>
     </View>
   );
 }
@@ -31,7 +32,7 @@ function ActiveExploreIcon(props: TabsIconProps) {
   return (
     <View style={tw`flex-row items-center gap-1`}>
       <ExploreIcon {...props} />
-      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Explore</Text>
+      <Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Albums</Text>
     </View>
   );
 }
@@ -51,12 +52,13 @@ function GalleryIcon({ color }: TabsIconProps) {
   return <Image source={require('@/assets/images/tabIcons/gallery-outline.svg')} tintColor={color} contentFit="contain" style={tw`h-5 w-5`} />;
 }
 function ActiveGalleryIcon(props: TabsIconProps) {
-  return <View style={tw`flex-row items-center gap-1`}><GalleryIcon {...props} /><Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Gallery</Text></View>;
+  return <View style={tw`flex-row items-center gap-1`}><GalleryIcon {...props} /><Text numberOfLines={1} style={tw.style('text-xs font-medium', { color: props.color })}>Device</Text></View>;
 }
 
 function FloatingTabBar({ state, navigation }: TabBarProps) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
+  const selectionActive = useSelectionNavigation((state) => state.hidden);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -71,14 +73,14 @@ function FloatingTabBar({ state, navigation }: TabBarProps) {
     return {
       key: route.key,
       label: '',
-      accessibilityLabel: home ? 'Home' : settings ? 'Settings' : gallery ? 'Gallery' : 'Explore',
+      accessibilityLabel: home ? 'Cloud' : settings ? 'Settings' : gallery ? 'Device' : 'Albums',
       activeIcon: home ? ActiveHomeIcon : settings ? ActiveSettingsIcon : gallery ? ActiveGalleryIcon : ActiveExploreIcon,
       inactiveIcon: home ? HomeIcon : settings ? SettingsIcon : gallery ? GalleryIcon : ExploreIcon,
       labelStyle: tw`text-base font-medium`,
     };
   }), [state.routes]);
 
-  if (keyboardVisible) return null;
+  if (keyboardVisible || selectionActive) return null;
 
   return (
     <View collapsable={false} style={tw.style('absolute self-center w-11/12 max-w-sm h-16 z-20', {

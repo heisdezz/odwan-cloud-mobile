@@ -20,3 +20,16 @@ export function galleryMonths<T>(items: readonly T[], dateForItem: (item: T) => 
   });
   return months;
 }
+
+/** Date selection follows local calendar boundaries, just like the displayed labels. */
+export function galleryDateIndices<T>(items: readonly T[], dateForItem: (item: T) => string | number | undefined, index: number, unit: 'day' | 'month') {
+  const target = items[index] && mediaDate(dateForItem(items[index]));
+  if (!target) return [];
+  const indices: number[] = [];
+  items.forEach((item, index) => {
+    const date = mediaDate(dateForItem(item));
+    if (date && date.getFullYear() === target.getFullYear() && date.getMonth() === target.getMonth()
+      && (unit === 'month' || date.getDate() === target.getDate())) indices.push(index);
+  });
+  return indices;
+}

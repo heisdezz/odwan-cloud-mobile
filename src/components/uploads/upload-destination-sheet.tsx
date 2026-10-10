@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -80,7 +81,7 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
       <Text style={tw.style('text-base', { color: colors.text })}>Connect to your server and log in to choose a cloud album.</Text>
       <Button label="Open settings" onPress={() => { onClose(); router.push('/settings'); }} />
     </View> : <>
-      <FlatList style={tw`flex-1`} keyboardShouldPersistTaps="handled" data={(albums.data ?? []).filter((album) => album.id !== 'unsorted')}
+      <FlatList renderScrollComponent={(props) => <KeyboardAwareScrollView {...props} bottomOffset={24} />} style={tw`flex-1`} keyboardShouldPersistTaps="handled" data={(albums.data ?? []).filter((album) => album.id !== 'unsorted')}
         keyExtractor={(album) => album.id} contentContainerStyle={tw`px-4 pb-4 gap-1`}
         ListHeaderComponent={<View style={tw`gap-3 pb-3`}>
           <Input label="Upload token" secureTextEntry value={token} onChangeText={setTokenInput}

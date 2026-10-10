@@ -58,7 +58,7 @@ export default function HomeScreen() {
       style={tw.style("flex-1", { backgroundColor: colors.background })}
     >
       <View style={tw`px-4 pt-2 pb-2 flex-row items-center gap-3`}>
-        <Text style={tw.style('flex-1 text-2xl font-semibold', { color: colors.text })}>Photos</Text>
+        <Text style={tw.style('flex-1 text-2xl font-semibold', { color: colors.text })}>Cloud</Text>
         {!!verifiedUrl && !!account && <BackupStatusCard compact />}
       </View>
       {!verifiedUrl || !account ? (

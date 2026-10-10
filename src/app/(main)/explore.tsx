@@ -13,7 +13,7 @@ export default function ExploreScreen() {
   const [savedSource, setSource] = useState<'local' | 'remote'>(Platform.OS === 'web' ? 'remote' : 'local');
   const source = params.source === 'local' ? 'local' : savedSource;
   return <SafeAreaView edges={['top', 'left', 'right']} style={tw.style('flex-1', { backgroundColor: colors.background })}>
-    <Text accessibilityRole="header" style={tw.style('text-3xl font-semibold px-6 pt-6 pb-4', { color: colors.text })}>Albums</Text>
+    <Text accessibilityRole="header" style={tw.style('text-2xl font-semibold px-4 pt-2 pb-2', { color: colors.text })}>Albums</Text>
     <View accessibilityRole="tablist" style={tw.style('flex-row mx-6 mb-5 rounded-full p-1', { backgroundColor: colors.backgroundElement })}>
       {([{ value: 'local', label: 'Device' }, { value: 'remote', label: 'Server' }] as const).map((tab) => {
         const selected = source === tab.value;

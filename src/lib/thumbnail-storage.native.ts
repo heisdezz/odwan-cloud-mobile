@@ -1,1 +1,1 @@
-export { readThumbnailStorage, clearThumbnailStorage } from './media-thumbnails.native';
+export { readThumbnailStorage, clearThumbnailStorage, trimThumbnailStorage } from './media-thumbnails.native';

@@ -5,7 +5,7 @@ import { createMediaSelectionStore, type MediaSelectionStore } from '@/lib/media
 import { DeviceGallerySelection } from './device-gallery-selection';
 import { UploadDestinationSheet } from '@/components/uploads/upload-destination-sheet';
 import { UploadQueueSheet } from '@/components/uploads/upload-queue-sheet';
-import { BackupStatusCard } from '@/components/uploads/backup-status-card';
+import { useSelectionTabBar } from '@/hooks/use-selection-navigation';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useQuery } from '@tanstack/react-query';
@@ -69,6 +69,7 @@ const GalleryTile = memo(function GalleryTile({ asset, status: savedStatus, prev
 function GalleryContent() {
   const insets = useSafeAreaInsets();
   const [selection] = useState(createMediaSelectionStore);
+  useSelectionTabBar(selection);
   const [uploadAssets, setUploadAssets] = useState<LocalAsset[]>([]);
   const [sheet, setSheet] = useState<'destination' | 'queue' | null>(null);
   const colors = useTheme();
@@ -119,7 +120,6 @@ function GalleryContent() {
     <Button label={permission.canAskAgain ? 'Allow gallery access' : 'Open app settings'} loading={requesting} onPress={() => { void grantAccess(); }} />
   </View>;
   return <View style={tw`flex-1`}>
-    <BackupStatusCard />
     <MediaTypeFilter refreshing={sync.running} onRefresh={() => { void refresh().catch((error) => toast.error(extract_message(error))); }} />
     {!cacheReadable ? <ActivityIndicator color={colors.text} style={tw`py-4`} /> : null}
     {sync.error && <View style={tw`px-6 py-2 gap-2`}>
@@ -133,9 +133,9 @@ function GalleryContent() {
     {statuses.isError && <Text style={tw.style('px-6 text-sm', { color: colors.text })}>{extract_message(statuses.error)}</Text>}
     {cacheReadable && <PageLoader query={gallery}>
       {() => <GridZoom dateForItem={dateForItem} resetKey={displayedFilter} data={assets}
-        extraData={statuses.data} keyExtractor={assetKey} getItemType={assetType}
+        selection={selection} extraData={statuses.data} keyExtractor={assetKey} getItemType={assetType}
         renderItem={renderItem}
-        contentInsets={{ bottom: BottomTabInset + Math.max(insets.bottom, 12) + 80 }}
+        contentInsets={{ bottom: BottomTabInset + Math.max(insets.bottom, 12) + 24 }}
         ListEmptyComponent={<Text style={tw.style('px-6 py-16 text-center text-base', { color: colors.textSecondary })}>{sync.running ? 'Indexing your photos and videos…' : displayedFilter === 'all' ? 'No photos or videos are accessible.' : `No ${displayedFilter} are accessible.`}</Text>}
         ListFooterComponent={gallery.error ? <View style={tw`px-6 py-4 gap-3`}>
           <Text style={tw.style('text-base', { color: colors.text })}>{extract_message(gallery.error)}</Text>
@@ -143,7 +143,7 @@ function GalleryContent() {
         </View> : null}
       />}
     </PageLoader>}
-    {cacheReadable && <DeviceGallerySelection selection={selection} ids={filteredIds} bottom={BottomTabInset + Math.max(insets.bottom, 12)} onUpload={upload} />}
+    {cacheReadable && <DeviceGallerySelection selection={selection} ids={filteredIds} bottom={Math.max(insets.bottom, 12) + 12} onUpload={upload} />}
     {cacheReadable && sheet === 'destination' && <UploadDestinationSheet key={`${verifiedUrl}:${account?.id}:${revision}`}
       assets={uploadAssets} albumName="" onClose={() => setSheet(null)} onQueued={() => { selection.getState().clear(); setUploadAssets([]); setSheet('queue'); }} />}
     {sheet === 'queue' && <UploadQueueSheet onClose={() => setSheet(null)} />}

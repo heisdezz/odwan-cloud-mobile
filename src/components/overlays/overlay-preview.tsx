@@ -7,7 +7,6 @@ import { VideoPlayer } from '@/components/media/video-player';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 import { AppModal } from './app-modal';
-import { SheetComparison } from './sheet-comparison';
 
 export function OverlayPreview() {
   const colors = useTheme();
@@ -25,7 +24,6 @@ export function OverlayPreview() {
     } catch { setError('Enter a valid HTTP or HTTPS video URL.'); }
   }
   return <View style={tw`gap-8 pt-8`}>
-    <SheetComparison />
     <View style={tw`gap-4`}>
       <Text accessibilityRole="header" style={tw.style('text-2xl font-semibold', { color: colors.text })}>Media and modals</Text>
       <Button label="Open modal example" variant="tonal" onPress={() => setModal(true)} />

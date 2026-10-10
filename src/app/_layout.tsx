@@ -1,4 +1,4 @@
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { Toaster } from 'sonner-native';
 import { MediaViewerProvider } from '@/providers/media-viewer-provider';
 import { QueryProvider } from '@/providers/query-provider';
@@ -22,7 +22,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  return <GestureHandlerRootView style={tw`flex-1`}><QueryProvider><ServerSessionProvider><UploadQueueProvider><GallerySyncProvider><AppThemeProvider><BottomSheetModalProvider><MediaViewerProvider><ThemedNavigation /></MediaViewerProvider></BottomSheetModalProvider></AppThemeProvider></GallerySyncProvider></UploadQueueProvider></ServerSessionProvider></QueryProvider></GestureHandlerRootView>;
+  return <GestureHandlerRootView style={tw`flex-1`}><QueryProvider><ServerSessionProvider><UploadQueueProvider><GallerySyncProvider><AppThemeProvider><KeyboardProvider><MediaViewerProvider><ThemedNavigation /></MediaViewerProvider></KeyboardProvider></AppThemeProvider></GallerySyncProvider></UploadQueueProvider></ServerSessionProvider></QueryProvider></GestureHandlerRootView>;
 }
 
 function ThemedNavigation() {

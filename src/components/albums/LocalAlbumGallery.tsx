@@ -1,3 +1,7 @@
+import { useSelectionTabBar } from '@/hooks/use-selection-navigation';
+import { useStore } from 'zustand';
+import { createMediaSelectionStore, type MediaSelectionStore } from '@/lib/media-selection';
+import { DeviceGallerySelection } from '@/components/gallery/device-gallery-selection';
 import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, Text, View } from "react-native";
@@ -36,25 +40,21 @@ const AlbumTile = memo(function AlbumTile({
   item,
   size,
   previewEnabled,
-  selecting,
-  selected,
+  selection,
   status: savedStatus,
-  onToggle,
   onOpen,
-  onSelect,
 }: {
   item: LocalAsset;
   size: number;
   previewEnabled: boolean;
-  selecting: boolean;
-  selected: boolean;
+  selection: MediaSelectionStore;
   status?: BackupStatus;
-  onToggle: (id: string) => void;
   onOpen: (id: string) => void;
-  onSelect: (id: string) => void;
 }) {
   const colors = useTheme();
   const status = useAssetBackupStatus(item, savedStatus);
+  const selecting = useStore(selection, (state) => state.selecting);
+  const selected = useStore(selection, (state) => state.selected.has(item.id));
   return (
     <Pressable
       accessibilityRole={selecting ? "checkbox" : "button"}
@@ -63,11 +63,11 @@ const AlbumTile = memo(function AlbumTile({
         selecting ? "Toggle selection" : "Hold to select for upload"
       }
       accessibilityState={selecting ? { checked: selected } : undefined}
-      onPress={() => (selecting ? onToggle(item.id) : onOpen(item.id))}
-      onLongPress={() => onSelect(item.id)}
+      onPress={() => (selecting ? selection.getState().toggle(item.id) : onOpen(item.id))}
+      onLongPress={() => selection.getState().start(item.id)}
       accessibilityActions={[{ name: "select", label: "Select for upload" }]}
       onAccessibilityAction={({ nativeEvent }) => {
-        if (nativeEvent.actionName === "select") onSelect(item.id);
+        if (nativeEvent.actionName === "select") selection.getState().start(item.id);
       }}
       style={tw.style("m-0.5 overflow-hidden", {
         width: size - 4,
@@ -121,49 +121,16 @@ const AlbumTile = memo(function AlbumTile({
   );
 });
 
-/** Compact controls share the floating gallery toolbar. */
-function AlbumAction({
-  accessibilityLabel,
-  icon,
-  onPress,
-  disabled = false,
-}: {
-  accessibilityLabel: string;
-  icon: React.ComponentProps<typeof SymbolView>["name"];
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const colors = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) =>
-        tw.style(
-          "h-11 w-11 rounded-full items-center justify-center",
-          {
-            backgroundColor: colors.backgroundElement,
-            opacity: disabled ? 0.38 : pressed ? 0.7 : 1,
-          },
-        )
-      }
-    >
-      <SymbolView name={icon} size={23} tintColor={colors.text} />
-    </Pressable>
-  );
-}
-
 function AlbumContent({ id, title }: { id: string; title?: string }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const viewer = useMediaViewer();
 
   const { verifiedUrl, account, revision } = useServerStore();
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selection] = useState(createMediaSelectionStore);
+  useSelectionTabBar(selection);
+  const selecting = useStore(selection, (state) => state.selecting);
+  const [uploadAssets, setUploadAssets] = useState<LocalAsset[]>([]);
   const [sheet, setSheet] = useState<"destination" | "queue" | null>(null);
   const query = useDeviceAlbumAssets(id);
   const deviceAlbums = useQuery({
@@ -205,33 +172,17 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
     [query.data],
   );
   const assets = indexedAssets[displayedFilter];
-  const selectedAssets = useMemo(
-    () => (query.data ?? []).filter((asset) => selected.has(asset.id)),
-    [query.data, selected],
-  );
-  const toggle = useCallback(
-    (assetId: string) =>
-      setSelected((old) => {
-        const next = new Set(old);
-        if (next.has(assetId)) next.delete(assetId);
-        else next.add(assetId);
-        return next;
-      }),
-    [],
-  );
-  const select = useCallback((assetId: string) => {
-    setSelecting(true);
-    setSelected((old) => new Set(old).add(assetId));
-  }, []);
+  const filteredIds = useMemo(() => assets.map(assetKey), [assets]);
+  const upload = useCallback((ids: readonly string[]) => {
+    const selected = new Set(ids);
+    setUploadAssets((query.data ?? []).filter((asset) => selected.has(asset.id)));
+    setSheet('destination');
+  }, [query.data]);
   const open = useCallback(
     (assetId: string) =>
       viewer.open({ items: assets.map(localViewerItem), selectedId: assetId }),
     [assets, viewer],
   );
-  const cancel = useCallback(() => {
-    setSelecting(false);
-    setSelected(new Set());
-  }, []);
   const renderItem = useCallback(
     ({
       item,
@@ -246,28 +197,25 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
         item={item}
         size={size}
         previewEnabled={previewEnabled}
-        selecting={selecting}
-        selected={selected.has(item.id)}
+        selection={selection}
         status={statuses?.[item.id]}
-        onToggle={toggle}
         onOpen={open}
-        onSelect={select}
       />
     ),
-    [selecting, selected, statuses, toggle, open, select],
+    [selection, statuses, open],
   );
   return (
     <View style={tw`flex-1 mt-2`}>
       <PageLoader query={query}>
         {() => (
           <GridZoom
+            selection={selection}
             dateForItem={dateForItem}
             resetKey={displayedFilter}
             data={assets}
             keyExtractor={assetKey}
             getItemType={assetType}
             renderItem={renderItem}
-            extraData={selected}
             contentInsets={{ bottom: 100 + insets.bottom }}
             ListEmptyComponent={
               <Text
@@ -302,29 +250,23 @@ function AlbumContent({ id, title }: { id: string; title?: string }) {
           />
         )}
       </PageLoader>
-      <View pointerEvents="box-none" style={tw.style('absolute left-3 right-3 items-center z-30', { bottom: Math.max(12, insets.bottom) })}>
+      {!selecting && <View pointerEvents="box-none" style={tw.style('absolute left-3 right-3 items-center z-30', { bottom: Math.max(12, insets.bottom) })}>
         <View style={tw.style('w-full max-w-md rounded-full px-2 py-1', {
           backgroundColor: colors.backgroundElement, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 8,
         })}>
-          {selecting ? <View style={tw`flex-row items-center`}>
-            <AlbumAction accessibilityLabel="Exit selection mode" icon={{ ios: 'xmark', android: 'close', web: 'close' }} onPress={cancel} />
-            <Text accessibilityLiveRegion="polite" accessibilityLabel={`${selectedAssets.length} selected`} numberOfLines={1}
-              style={tw.style('flex-1 text-base font-semibold px-2', { color: colors.text })}>{selectedAssets.length}</Text>
-            <AlbumAction accessibilityLabel="Select all filtered media" icon={{ ios: 'checkmark.circle', android: 'select_all', web: 'select_all' }}
-              disabled={!assets.length} onPress={() => setSelected(new Set(assets.map((asset) => asset.id)))} />
-            <AlbumAction accessibilityLabel={`Upload ${selectedAssets.length} selected items`} icon={{ ios: 'icloud.and.arrow.up', android: 'cloud_upload', web: 'cloud_upload' }}
-              disabled={!selectedAssets.length} onPress={() => setSheet('destination')} />
-          </View> : <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />}
+          <MediaTypeFilter refreshing={query.isFetching} onRefresh={() => { void query.refetch(); }} />
         </View>
-      </View>
+      </View>}
+      <DeviceGallerySelection selection={selection} ids={filteredIds} bottom={Math.max(12, insets.bottom)} onUpload={upload} />
       {sheet === "destination" && (
         <UploadDestinationSheet
           key={`${verifiedUrl}:${account?.id}:${revision}`}
-          assets={selectedAssets}
+          assets={uploadAssets}
           albumName={albumName}
           onClose={() => setSheet(null)}
           onQueued={() => {
-            cancel();
+            selection.getState().clear();
+            setUploadAssets([]);
             setSheet("queue");
           }}
         />

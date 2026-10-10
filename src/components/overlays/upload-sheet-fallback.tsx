@@ -1,5 +1,6 @@
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import type { PropsWithChildren } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, Pressable, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import tw from '@/lib/tw';
 export type UploadSheetProps = PropsWithChildren<{ onClose: () => void }>;

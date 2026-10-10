@@ -1,3 +1,4 @@
+import { useSelectionTabBar } from '@/hooks/use-selection-navigation';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MoveServerMediaSheet } from "./move-server-media-sheet";
 import { useStore } from "zustand";
@@ -197,6 +198,7 @@ const MediaGridContent = memo(function MediaGridContent({
   const [moveIds, setMoveIds] = useState<string[] | null>(null);
   const capabilities = useMediaCapabilities();
   const [selection] = useState(createMediaSelectionStore);
+  useSelectionTabBar(selection);
   const [confirmation, setConfirmation] = useState<string[] | null>(null);
   const [completed, setCompleted] = useState(0);
   const onDeleted = useCallback(
@@ -217,8 +219,7 @@ const MediaGridContent = memo(function MediaGridContent({
     "restore",
   );
   const deleting = deletion.isPending || restoration.isPending;
-  const selecting = useStore(selection, (state) => state.selecting);
-  const contentInsets = useMemo(() => ({ bottom: (trash ? insets.bottom + 24 : mediaInsets.bottom) + (selecting ? 80 : 0) }), [trash, insets.bottom, selecting]);
+  const contentInsets = useMemo(() => ({ bottom: (trash ? Math.max(insets.bottom, 12) + 88 : mediaInsets.bottom) }), [trash, insets.bottom]);
   const loadedIds = useMemo(() => items.map((item) => item.id), [items]);
   const mediaFilter = useGridStore((state) => state.mediaFilter);
   const colors = useTheme();
@@ -277,6 +278,8 @@ const MediaGridContent = memo(function MediaGridContent({
   return (
     <View style={tw`flex-1`}>
       <GridZoom
+        selection={deleting ? undefined : selection}
+        selectionScope="loaded"
         dateForItem={dateForItem}
         resetKey={mediaFilter}
         data={items}
@@ -329,7 +332,7 @@ const MediaGridContent = memo(function MediaGridContent({
         deleting={deleting}
         onDelete={setConfirmation}
         onMove={trash ? undefined : setMoveIds}
-        bottom={(trash ? 0 : BottomTabInset) + Math.max(insets.bottom, 12)}
+        bottom={Math.max(insets.bottom, 12) + 12}
         trashAvailable={capabilities.data?.trash}
         onRestore={trash ? (ids) => restoration.mutate(ids) : undefined}
       />

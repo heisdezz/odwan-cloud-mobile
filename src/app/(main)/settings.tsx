@@ -1,3 +1,4 @@
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { StorageSettings } from '@/components/settings/storage-settings';
 import { AppearanceSettings } from '@/components/settings/appearance-settings';
 import { BackupStatusCard } from '@/components/uploads/backup-status-card';
@@ -10,7 +11,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SymbolView } from "expo-symbols";
 import { router, type Href } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
 import { Button, Input } from "@/components/ui";
@@ -64,7 +65,7 @@ export default function SettingsScreen() {
       edges={["top"]}
       style={tw.style("flex-1", { backgroundColor: colors.background })}
     >
-      <ScrollView
+      <KeyboardAwareScrollView bottomOffset={24}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={tw.style("px-6 pt-6 gap-6", {
           paddingBottom: BottomTabInset + 24,
@@ -199,7 +200,7 @@ export default function SettingsScreen() {
         )}
         <StorageSettings />
         <AppearanceSettings />
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

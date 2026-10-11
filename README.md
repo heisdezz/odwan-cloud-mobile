@@ -1,187 +1,133 @@
 # Odwan
 
-Expo SDK 57 app using Expo Router. Screens live in `src/app/`.
+A mobile photo and video gallery with backups to your own cloud server. Browse device media, organize cloud albums, and track which originals have been backed up.
+
+Built with Expo SDK 57, React Native, and Expo Router. Android is the primary target; device-gallery features also have iOS implementations, while web supports cloud browsing with platform fallbacks.
+
+**Backend:** [odwan-cloud-backend](https://github.com/heisdezz/odwan-cloud-backend) · **API integration guide:** [BACKEND.MD](BACKEND.MD)
+
+## Features
+
+- **Device gallery:** a persistent SQLite media index, device albums, photo/video filters, and incremental library updates after the initial scan.
+- **Cloud library:** authenticated media browsing, albums, search and sorting for albums, and server-generated thumbnails.
+- **Grid controls:** pinch between 2–6 columns, a focused-tile zoom preview, saved grid density, and date navigation.
+- **Selection:** hold and drag to select ranges, scroll near the edges, then upload local items or manage cloud items through a floating toolbar.
+- **Media viewer:** swipe between items, zoom photos, seek videos, change playback speed, favorite items locally, and share originals.
+- **Uploads:** a persistent sequential queue, destination album selection or creation, progress reporting, retry controls, and separate upload history.
+- **Trash:** restore cloud items within 30 days or permanently delete them when the connected backend supports recoverable trash.
+- **Appearance:** system, light, and dark modes; dynamic Material colors on supported Android devices.
+- **First-launch welcome:** start with the device gallery or connect a server. Reopen the guide through Settings → Getting started.
+
+## Get started
+
+Install [Bun](https://bun.sh), then install the locked dependencies:
 
 ```sh
-bun install
-bunx expo start
+bun install --frozen-lockfile
+```
+
+Install a development APK from GitHub Actions and start Metro:
+
+```sh
+bunx expo start --dev-client
+```
+
+Open the installed app and connect it to the development server. The phone and computer need to be able to reach each other over the network.
+
+A development build is needed to exercise the full native feature set. Expo Go can preview parts of the interface, but Android gallery access and several custom native modules require the installed APK. Adding or changing native dependencies requires a new native build.
+
+For web development:
+
+```sh
+bun run web
+```
+
+### Connect your backend
+
+1. Deploy or run [odwan-cloud-backend](https://github.com/heisdezz/odwan-cloud-backend).
+2. In Settings, enter its base URL and select **Test connection**. The app checks `GET /api/test/connection` for an `ok` response.
+3. Log in with a PocketBase **superuser** account. Authentication currently uses `_superusers`.
+4. To upload, enter the server's separate upload token in the destination sheet. The current upload contract uses `POST /api/test/s3/upload` and requires the backend's test routes to be enabled.
+
+Use HTTPS for a deployed server. For LAN testing, bind the backend to a reachable interface such as `0.0.0.0:8090` and enter `http://<computer-LAN-IP>:8090`. `localhost` on a phone refers to the phone itself. The Android configuration permits cleartext HTTP for local testing.
+
+Server URLs and preferences persist across launches. Login tokens and upload tokens are saved per normalized server URL in encrypted MMKV on supported native builds; SecureStore holds the encryption key. Passwords are never persisted. Saved login sessions are validated in the background, and logging out removes the selected server's saved session.
+
+## Using the gallery and backups
+
+Open **Device** to grant media access and start the initial library scan. Later launches read the saved index while checking for updates. Refocusing the app with full permission does not start another full scan; use Refresh when a complete reconciliation is needed.
+
+Open a device album or the main device gallery, hold an item, and select the media to upload. Choose an existing cloud album, Unsorted, the device album's name, or a new name. Album matching ignores case and reuses an existing destination when possible.
+
+Uploads run one at a time. The queue reports preparation, bytes sent, backend confirmation, and album assignment separately. Reaching 100% sent means the request body has been transferred; the backend may still be saving the file. A failed album assignment retries without uploading the original again.
+
+Settings provides **Current uploads**, **Uploaded**, and **Trash**. Upload history is separate from the active queue. Backup status is tied to the server, account, device asset, and modification time, so an edited original is not treated as already backed up.
+
+### Background behavior
+
+A rebuilt Android app uses a foreground data-sync service with a persistent upload notification. Start uploads while the app is visible and allow notification permission when requested. The notification opens Current uploads and shows progress for the active transfer.
+
+Without that native service, uploads run while the app is active. Pending work survives relaunches and resumes after restoring the same account. Force-stop, process termination, battery restrictions, and Android's foreground-service time limits can interrupt a transfer; interrupted jobs retain their object key for retry.
+
+The device-library scan is idle-paced native I/O coordinated by the app, rather than a service that runs after termination.
+
+## Performance and storage
+
+FlashList virtualizes the grid while the device library's complete metadata index stays in SQLite. Thumbnail work is limited to the visible window and a small buffer. New work pauses during scrolling and pinching; queued work for offscreen items can be skipped.
+
+Supported Android builds generate local previews through the app's `OdwanMedia` native module on I/O workers. Other supported runtimes use Expo fallbacks. Cloud previews come from the backend through PocketBase file URLs or the backend thumbnail endpoint; cloud originals are not downloaded to generate previews.
+
+JPEG previews persist across launches. Settings offers cache budgets of **64, 128, 256, or 512 MB**, defaulting to **128 MB**, with automatic eviction that protects active and recently used previews. Clearing this cache preserves originals, backup records, and upload history. The displayed cache size excludes shared exports and other OS-managed caches.
+
+MMKV stores preferences, while SQLite stores the gallery index, album snapshots, backup state, upload queue, and history. Expo Go and older native builds use the available storage fallbacks. Web uses localStorage for preferences and sessionStorage for login tokens.
+
+## Android builds
+
+GitHub Actions builds APKs directly with Expo prebuild and Gradle. **EAS credentials, `EXPO_TOKEN`, and `EXPO_PROJECT_ID` are not required.**
+
+| Branch | Workflow | Output | Artifact retention |
+| --- | --- | --- | --- |
+| `dev` | [Android debug APK](.github/workflows/debug-apk.yml) | Development-client APK; needs Metro | 7 days |
+| `main` | [Android release APK](.github/workflows/release-apk.yml) | Standalone optimized APK | 14 days |
+
+Both workflows also support manual runs. Download the APK from the workflow run's **Artifacts** section.
+
+Builds target **arm64-v8a only** and use cached Bun downloads, enhanced Gradle caching, and the Gradle build cache. Release builds enable R8/ProGuard, resource shrinking, PNG crunching, bundle compression, and compressed native library packaging. The release workflow checks signing, ARM64 architecture, non-debuggable mode, and R8 mapping output.
+
+Release APKs use an automatically generated debug signing key retained in a dedicated Actions cache. They are intended for direct testing. If that cache is lost, a new key may require uninstalling the previous APK. Store distribution requires a persistent production signing key.
+
+The application ID is `com.heisdezz.odwan`. Native `android/` and `ios/` projects are generated; configure native behavior in [app.json](app.json), config plugins, and local modules.
+
+## Development
+
+```sh
 bun run lint
 bun run typecheck
+bun test
 ```
 
-## Android release builds
+Optional PocketBase type generation uses local configuration from [.env.example](.env.example):
 
 ```sh
-# Generate and compile locally using the installed Android SDK
-bunx expo run:android --variant release
+bun run typegen
 ```
 
-Release builds require a local Android SDK and JDK. Configure production signing through a config plugin before distributing a release; the generated template's debug signing is for testing.
-
-Android builds target **arm64-v8a only**. They cannot run on 32-bit ARM devices or x86/x86_64 emulators. To restore other architectures, edit `buildArchs` in `app.json`.
-
-`expo-build-properties` applies R8/ProGuard minification, resource shrinking, PNG crunching, JavaScript bundle compression, and compressed native library packaging during native generation. Release builds use the libraries’ existing ProGuard rules. React Native GIF/WebP decoders are disabled because this app renders images with `expo-image`.
-
-Compression prioritizes APK download size; it can increase startup time and native library extraction costs. Measure size and startup on a physical device after building. Expo Go does not exercise these native release settings.
-
-Native `android/` and `ios/` directories are generated by Expo and should not be edited manually.
-
-Pushes to `main` run `.github/workflows/release-apk.yml` and upload an ARM64-only release APK as a GitHub Actions artifact. Pushes to `dev` keep producing debug APKs. Both workflows use enhanced Gradle caching and the Gradle build cache, without EAS credentials. The release workflow runs lint, typecheck and tests, then verifies APK signing, architecture, non-debuggable mode and the R8 mapping output.
-
-Release APKs are signed with an automatically generated debug key, reused through a dedicated GitHub Actions cache. No signing secrets are required. If the signing cache is evicted or cleared, the new key requires uninstalling an existing build before installing its replacement. These APKs are for direct testing; store distribution needs a persistent production signing key.
-
-## Shared UI and styling
-
-Import `Button`, `Input`, `Switch`, and `Checkbox` from `@/components/ui`. Android uses native Expo UI Jetpack Compose controls. Each control owns its `Host`, so place it inside ordinary React Native layouts; do not nest these wrappers inside another Compose `Host`. iOS and web use accessible React Native fallbacks.
-
-```tsx
-import { Button, Input } from '@/components/ui';
-import tw from '@/lib/tw';
-import { useTheme } from '@/hooks/use-theme';
-import { useAppTheme } from '@/providers/app-theme-provider';
-
-// Inside a component:
-const colors = useTheme();
-const { toggleTheme, setTheme } = useAppTheme();
-// <View style={[tw`flex-1 p-4 gap-4`, { backgroundColor: colors.background }]}>
-//   <Input label="Name" value={name} onChangeText={setName} />
-//   <Button label="Save" onPress={save} />
-//   <Button label="Switch theme" onPress={() => void toggleTheme()} />
-// </View>
-// void setTheme('system'); // or 'light' / 'dark'
-```
-
-Use `twrnc` for React Native layout, spacing, typography, and responsive utilities. Use `useTheme()` for semantic colors rather than hardcoded Tailwind colors. The root provider initializes device context and synchronizes `dark:` utilities with the selected appearance. Native Compose internals use Expo UI modifiers, not React Native styles; the shared controls' `style` prop styles their outer React Native host.
-
-Material colors follow the wallpaper on Android 12+ and use Material 3 defaults on older Android versions. Navigation, existing themed components, and the new controls share the palette. iOS/web retain the existing surface colors with Material fallback accents.
-
-Theme selection lasts for the current session. `react-native-theme-switch-animation` animates explicit theme changes in a native build and respects reduced motion. Web and Expo Go switch directly. Build a new APK with the preview profile after installing the native package; its animation and compatibility with React Native 0.86 still require device verification.
-
-## Albums
-
-Explore has a Device / Server album switcher. `LocalAlbums` lists device albums and counts from MediaLibrary, fetching covers on demand and sharing the gallery's thumbnail cache and permissions. Opening a device album reads its saved, permission-scoped SQLite membership immediately, then refreshes complete photo/video metadata in idle-paced batches; the viewer can swipe through that album. Library changes invalidate local album queries; app focus alone does not reload them. `RemoteAlbums` keeps the authenticated, paginated server list. Web shows the server source by default and explains that device albums require the mobile app.
-
-## Animated tab bar
-
-The floating navigation uses `react-native-jelly-tabs` with Expo Router's headless tabs. Its controlled selection follows route changes, including Android back navigation. App-owned layout, icons, and labels use `twrnc`.
-
-Jelly Tabs uses Reanimated, Gesture Handler, SVG, and Masked View. The root layout includes `GestureHandlerRootView`. The old animated-nav-tab-bar package and its compatibility patch have been removed.
-
-## Server and superuser login
-
-Settings accepts an HTTP(S) base URL and checks `GET /api/test/connection`. The endpoint must return `ok` as plain text or a JSON string. Non-success HTTP responses, unexpected bodies, and requests exceeding 10 seconds show an error. Login becomes available after a successful check and opens `/auth`, which authenticates against PocketBase's `_superusers` collection.
-
-React Query owns request state and the root query provider tracks native app focus. Zustand holds the URL, verified connection, and account metadata. sonner-native displays feedback throughout the app. Editing the URL or retesting clears verification and active authentication; responses from older checks or logins cannot change the current session. Only server queries are cleared, keeping the local gallery, database, and device thumbnail caches intact. Connection checks show elapsed request time and start restoring the saved login afterward, without waiting for authentication refresh.
-
-MMKV saves server/grid/viewer preferences in native builds and migrates existing SQLite preferences on first read. Successful logins save a minimal account and token separately for each normalized server URL in an encrypted MMKV instance on Android/iOS; SecureStore holds only its randomly generated encryption key. Saved sessions are validated through PocketBase `_superusers/auth-refresh` in the background on launch and after testing a connection. Rejected or expired tokens require login again; temporary network failures preserve the saved token for a later retry. Logout removes that server's saved session; switching servers keeps other servers' sessions. Passwords are never persisted. Web uses localStorage for preferences and tab-scoped sessionStorage for tokens. Rebuild native APKs to include MMKV, Nitro, and SecureStore. Expo Go/older builds without MMKV continue using SQLite preferences and SecureStore sessions when available. Use the server's LAN address when connecting from a physical phone. Connection and authentication tests use mock responses, not live credentials.
-
-## Photos library
-
-`src/helpers/api.ts` exports `extract_message(error: unknown)` for PocketBase and standard errors. `PageLoader` accepts a typed React Query result, custom loading/empty content, and either ordinary children or a data render function. It retries initial errors and preserves existing content during background refetches.
-
-Home loads `media_item` records in pages of 60 using React Query and FlashList v2 masonry. It includes pull-to-refresh, pagination, empty/error states, recycled image cells, and responsive columns. Queries are scoped to the server and account. Images use authenticated `/api/media/{id}/stream` requests; tokens are sent in headers and images use memory caching.
-
-Tile proportions come from `metadata_json.width` and `metadata_json.height` when available, with a square fallback. Server tiles and album covers use PocketBase’s `files.getURL(record, record.thumbs, { token })` for saved photo/video JPEGs. A shared, session-scoped `files.getToken()` result is renewed every minute and kept only in memory. If `thumbs` is empty, `/api/media/{id}/thumb` generates the missing preview on demand. The backend generates missing 320px previews; the app caches the JPEG unchanged without downloading originals or invoking a decoder. Requests run one at a time, have a 60-second deadline and 1 MiB bound, and briefly retry 503 responses with short Retry-After values. Long failure cooldowns show the retry placeholder. Browser previews fetch authorized file URLs before creating a temporary object URL. Full-screen playback and sharing still use the original stream endpoint.
-
-Server Photos and album grids support Select or long-press, per-tile checkboxes, All loaded, and Done. Delete opens a confirmation explaining that PocketBase library records are removed while device copies and external S3/Telegram objects remain. Confirmed deletions run sequentially with progress; failed items stay selected for retry. Media lists, album counts/covers, and device backup indicators update afterward. Selection is scoped to the server/account session; switching sessions stops the remaining batch. No live server files are deleted by automated tests.
-
-
-## Device Gallery and local backup tracking
-
-Gallery reads the phone's photos and videos with `expo-media-library` and displays the complete saved index through a virtualized FlashList grid. Access is requested from the Gallery screen; denied and limited access are handled explicitly. Photo previews load locally, and native video tiles generate preview frames from their local asset URI. Web shows a native-device fallback. Android Expo Go blocks broad gallery permissions, so Gallery shows a development-build message there. A conditional adapter uses the class-based API when available and the legacy API in compatible native runtimes.
-
-`expo-sqlite` persists discovered asset metadata in `odwan-local.db`. Backup records are scoped to the server URL, account, asset ID, and modification time, so editing an asset or switching accounts does not inherit an earlier backup status. Marking an asset `backed_up` requires a confirmed remote record ID and file hash. Untracked assets show a crossed-out cloud icon with a descriptive accessibility label. Confirmed file transfers update these backup records, even if album assignment still needs retry; existing cloud files are not reconciled against the device library automatically. Credentials are not stored in SQLite.
-
-Open a device album and hold an item. Use Select all to select the currently filtered items, then Upload to choose an existing cloud album, Unsorted, or the device album's name. Album-name matching ignores case and creates the cloud album only when necessary. Upload sheets use `@swmansion/react-native-bottom-sheet`, with a standard modal fallback in Expo Go/older APKs; rebuild the APK to include its native component.
-
-The current backend requires a separate `test_token` for `POST /api/test/s3/upload`. Enter it in the upload sheet; it is saved per server in encrypted MMKV (SecureStore fallback). A PocketBase login is also required to list/create albums and assign uploaded records. Test routes must be enabled on the server. Each queue entry retains a unique `tests/` object key, device asset version, account/server scope, album destination, and confirmed server response in SQLite. Files upload sequentially. In a rebuilt Android app, `react-native-background-actions` keeps the same worker running with a persistent data-sync notification while the app is minimized or the screen is locked. The service starts while the app is visible; notification permission is requested on Android 13+. Tapping the notification opens Current uploads. Pause/logout abort the request and stop the service. The pause choice is saved per server/account. Without the native service (Expo Go, older APKs, iOS, or denied notification permission), uploads run only while the app is active; backgrounding preserves pending work. The queue resumes after returning to the app or relaunching and restoring the same account. If a request loses its connection, the current item returns to the queue with its original object key. The app checks its own server endpoint and retries with backoff up to 30 seconds while active; an HTTP rejection still appears as a failed item for manual review. Failed entries remain available for retry/removal. A failed album assignment retries using the confirmed record without resending bytes. Duplicate responses reuse the returned media record; choosing another album moves that cloud record rather than creating a second copy. The queue and Android notification show per-file bytes sent and upload percentage through React Native’s native multipart transport. Progress updates affect only the active row and are throttled; they are not persisted to SQLite. At 100% sent, the app shows Saving to cloud until the backend confirms storage, then Adding to album. Cloud-storage forwarding has no separate percentage endpoint. Foreground transfers start alongside notification-service startup rather than waiting for its HeadlessJS callback. Preparing original remains visible while the app validates and resolves device media; cloud-only originals may need downloading first. Files above 255 MiB are rejected locally to leave multipart overhead below the backend's 256 MiB limit. No live cloud transfer is performed by the test suite. The queue pauses before Android’s six-hour data-sync limit; tap Resume while the app is visible to continue. Android foreground-service time limits, force-stop, process death, and device battery restrictions can still interrupt uploads; interrupted entries resume with the same object key when the app opens again.
-
-The media-library config plugin requests photo/video permissions without location access. Rebuild existing native development/release builds to apply the permission configuration. SQLite schema persistence and integrity checks run with `bun test tests/local-store.test.js`.
-
-Explore → Server offers **New album**. The upload destination sheet also accepts a new album name. Both paths trim names, reuse case-insensitive matches, and refresh the album list after creating a destination.
-
-Settings → **Current uploads** lists pending, uploading, organizing, and failed queue entries with pause/resume, retry, and removal controls. Settings → **Uploaded** reads a separate, paginated SQLite history for the selected server/account. SQLite archives the confirmed response and destination atomically when album assignment finishes; failed album assignments stay in Current uploads. Existing completed queue entries migrate into history on upgrade. Clearing the queue never clears the history.
-
-
-## Debug APK from GitHub Actions
-
-Every push to `dev` runs **Android debug APK**. You can also start it manually under **Actions → Android debug APK → Run workflow**. No Expo account, EAS, access token, or project ID is required.
-
-The workflow installs from `bun.lock`, runs lint/typecheck/tests, sets up Java 21 and Android SDK 36, generates the Android project with Expo prebuild, and invokes Gradle `:app:assembleDebug` directly on GitHub's runner. It caches Bun downloads and Gradle dependencies/build state, limits build workers to two, and cancels obsolete builds on the same branch. Only ARM64 is built. The APK is attached to the workflow run as `odwan-debug-arm64-<run number>` for seven days, without redundant ZIP compression. Generated native projects remain ignored by Git.
-
-The debug APK includes `expo-dev-client` and uses the generated debug keystore. Install it on an ARM64 phone, run `bunx expo start --dev-client`, and connect from the launcher. It needs Metro and is larger than the optimized release APK. The Android application ID is `com.heisdezz.odwan`.
-
-## Media and overlay components
-
-The test screen retains modal, image zoom and video URL examples. Production upload sheets use `@swmansion/react-native-bottom-sheet`; the old sheet comparisons and their dependencies have been removed.
-
-- `VideoPlayer` uses `expo-video`, creates a player only while mounted, releases it on unmount, pauses in the background, and loads source changes asynchronously. It streams directly and disables persistent video caching in the example.
-- Native `ImageViewer` uses `react-native-zoom-toolkit` with `expo-image` for pinch/double-tap zoom and memory caching. Web uses an image modal fallback. Source objects may include authenticated request headers.
-- `AppModal` wraps `react-native-modal` with themed content, backdrop/Back dismissal, keyboard avoidance, and safe-area margins.
-- `KeyboardProvider` is installed at the app root for coordinated keyboard movement. Login, Settings and upload destination forms use keyboard-aware scrolling. App-owned component styling uses `twrnc`.
-
-These are reusable components and comparison examples; they do not add uploads or change the backend contract in `BACKEND.MD`. Rebuild the native app after installing `expo-video`, `expo-dev-client`, or the image zoom package. `.env` is local-only; copy `.env.example` for optional configuration.
-
-## Grid zoom and video previews
-
-Photos and Gallery use a single FlashList with 2–6 columns. Pinch inward to show more columns; spread outward for larger tiles. Pinching highlights the tile nearest the gesture center and scales that cached tile with a cross of lightweight preview squares over a dimmed grid. The list stays still during the gesture, then commits its new density once and preserves the highlighted tile vertically. Cancelling, leaving the screen, rotating, or replacing the dataset clears the preview. A Native gesture is attached to the actual scroll view and is simultaneous with pinch; cancellation restores the preview without disabling scrolling. App styling uses `twrnc`.
-
-Photo and video thumbnails are generated on demand, bounded to 256×256 without stretching, compressed as JPEGs, and stored in the app's documents directory. Subsequent mounts and app sessions reuse these files. A bounded 512-entry URI lookup avoids repeated hashing and disk checks. Device thumbnails have two reserved generation slots; backend JPEG downloads use a separate single slot. Both queues pause new work while a grid is scrolling or pinching; offscreen queued jobs can be cancelled, while started jobs finish publishing their output. Rebuilt Android apps use the local `OdwanMedia` Expo module and MediaStore thumbnail decoding on I/O workers for device photos/videos. Older builds, iOS, and unsupported local providers retain the Expo fallback; video fallback frames use `expo-video` with a 20-second deadline. Rebuild the APK to include the native local thumbnail module. Server files use backend JPEGs with a separate cache version, so old client-generated server previews are not reused. Local thumbnail queries retain their identity when server login changes. Unsupported codecs or inaccessible files expose a retry action.
-
-Local preview keys include asset ID and modification time. Server disk keys include server, account, file hash, and storage mapping; connection revision separates in-memory queries. Authorization is sent in request headers. Web retains original photo previews and video placeholders.
-
-## Local gallery index
-
-The root `GallerySyncProvider` checks existing media permissions at app launch and starts syncing the accessible phone library into `odwan-local.db`. Gallery reads the full saved metadata index from SQLite in one query. Its viewer receives the same complete list; scrolling does not append another metadata page. FlashList recycles a bounded set of cells, and thumbnail queries mount only for visible rows plus a two-row buffer on either side. Measurement and distant pooled cells do not request thumbnails. Leaving this window cancels queued jobs; started jobs finish and persist their JPEG. The first scan progressively makes media available and saves a completion checkpoint. Later launches read the saved index while an incremental update checks changes since that checkpoint. Refocusing with full access checks permissions without scanning. The Refresh button requests a full scan; debounced library notifications enqueue updates without restarting the current scan.
-
-Media queries and SQLite writes execute on native I/O queues while the app is open. Each scan page uses two bound bulk SQL writes instead of two calls per asset; SQLite parses the page on its worker. The JavaScript coordinator waits for active grid gestures to finish and an idle slot between pages, with a 32ms minimum pause and a bounded idle timeout. Initial gallery refreshes are limited to once every five seconds; cached-library scans publish at completion without per-page React progress updates. It is not an OS background service and does not promise work after the app is terminated. After a completed scan, metadata queries filter by modification time with a two-second overlap. ID-only queries reconcile deletions and discover imports with older timestamps; only newly discovered IDs need targeted metadata reads. iOS incremental events update/delete their supplied IDs directly. Android events lack changed IDs, so they trigger the filtered metadata query and ID reconciliation. The legacy native API falls back to a full scan. Use Refresh to repair changes whose timestamps were not updated by the source app. Thumbnails are generated only when requested by cells.
-
-Schema version 2 adds `gallery_index`, which selects each asset's current version. Version 3 adds a saved scan checkpoint and permission scope, advanced only after a successful reconciliation. Versioned `local_assets` and `backup_status` remain intact when phone media is deleted or edited. Only a successful complete scan removes unseen index entries; failed or cancelled scans retain cached entries for retry. Version 6 adds permission-scoped album snapshots and ordered membership; cancelled writes roll back without losing the previous snapshot. Migration preserves existing backup records and requires no database reset.
-
-Permission is checked before showing cached media. Limited-access selections are revalidated before exposing an old selection; they do not use the immediate full-library cache path. Android Expo Go still requires a development build for gallery access. Reload the app after installing the updated JavaScript so the migration runs.
-
-Zoom grids use an All / Videos / Images filter, persisted with the grid density. Remote media queries apply the MIME filter on the server before pagination; local grids index cached metadata once and defer filter swaps while keeping FlashList mounted. Upload badges subscribe per asset/version; upload phase changes do not invalidate the entire grid. Backup-query refreshes wait until grid interaction ends. Viewers open the filtered list. Pull-to-refresh is disabled on zoom grids; the toolbar Refresh button remains available. Scroll offset is tracked by a separate Reanimated native listener, preserving FlashList’s recycler handler. A row-aligned thumbnail window publishes only at boundary changes, and each cell subscribes to its own visibility state without changing list extraData.
-
-## Full-screen media viewer
-
-The media viewer uses a compact filename/count header, capture date/time and dimensions, edge-to-edge media, and an icon toolbar. Tap media to hide/show controls. Photos retain pinch/double-tap zoom; swipe or use arrows to browse. Video has a draggable seek timeline, play/pause, mute and playback speed. Opening details or sharing pauses video without discarding its position.
-
-Favorites persist locally in Odwan and are scoped to the device item or server/account/item. Sharing prepares the original file on demand, authenticates server downloads, and opens the system share sheet. The export stays in OS-managed cache so the recipient can read it. Web uses file sharing when available or downloads the file. Rebuild the debug APK for the newly added `expo-sharing` native module; older builds show an explanatory error when Share is tapped.
-
-Grid interaction scheduling pauses queued thumbnail generation/downloads during scrolling and pinching; cached previews remain available and started jobs finish. The pinch reservation lasts through the column-layout commit and focal scroll restoration. Hidden grids keep their current density until focused, avoiding simultaneous recycler relayouts when the persisted column preference changes.
-
-## Gallery and library controls
-
-Gallery filters use compact All / Videos / Photos controls and an icon refresh action. Hold a tile to select it; selection controls disappear when finished. The date label opens a month picker, and the right-edge handle scrubs through the loaded dates without changing the square-tile layout or remounting FlashList. Remote date navigation covers loaded pages; device galleries use their cached full list.
-
-Explore supports album search and sorting: device albums by name or item count, server albums additionally by newest. Cloud album menus offer rename, add items from a device album, and removal with media moved to Unsorted. Removing an album preserves its media. The Unsorted album cannot be renamed or removed.
-
-Backup summaries count current device versions for the connected server and show remaining items, paused queues, connection waits, and errors. Settings separates Backup, Connection, Storage, and Appearance. Editing a server URL leaves the current session intact until Test connection is pressed. System/light/dark choices persist with preferences storage.
-
-Storage shows the app's JPEG thumbnail cache size and can clear it after active thumbnail jobs finish. Queued work stays paused during clearing; previews are regenerated/downloaded on demand. Originals, SQLite backup records, and upload history remain intact. This size excludes video downloads, shared exports, and OS-managed caches.
-
-## Recoverable server trash
-
-Trash requires the backend changes in the companion `go-test` working tree to be deployed. The app probes `/api/media/capabilities` and disables trash actions on older servers. Library queries exclude trashed records on supported servers. Hold server media to move it to Trash; Settings → Trash allows restoration or permanent deletion. Device copies remain untouched.
-
-Trashed items can be recovered for 30 days. Expired items are removed in bounded background batches; permanent deletion queues durable cloud cleanup with retry/backoff. S3 cleanup validates the bucket and uses an ETag condition. Versioned S3 buckets retain historical versions according to bucket lifecycle settings. Explicitly uploading the same trashed file restores its existing record.
-
-No live trash/deletion operations are needed for testing; regression tests use temporary databases and storage stubs.
-
-
-## Compact gallery interactions and bounded previews
-
-Cloud, Device and Albums use compact headers and matching tab labels. Selection replaces the floating tabs with one action bar; Android Back exits selection. Hold and drag across a grid to select a range, with automatic scrolling near the edges. Starting from a selected tile deselects a range, and reversing the drag restores the initial selection outside that range. Local album tiles subscribe individually to selection state. Date navigation can select a day or month; server actions apply to loaded records.
-
-Media filters open an anchored menu. The timeline fades when idle and becomes prominent during scrolling. Haptics provide feedback on selection, filter changes and committed grid density changes. The grid publishes its visible index from the UI thread rather than reading the scroll shared value in its JavaScript callback.
-
-Settings offers persistent thumbnail cache budgets of 64, 128, 256 and 512 MB, defaulting to 128 MB. Automatic eviction protects visible images, active generation and recently used previews. Inspection and deletion run in small batches after gallery gestures settle. Old previews regenerate on demand without changing original media or backup history.
-
-Build through CI to include the added haptics and keyboard modules. Device checks should cover drag selection, edge scrolling, filter changes, pinch release, keyboard movement in upload sheets, and release frame timing while uploads are active.
-
-
-## First-launch welcome
-
-A new installation opens a compact welcome screen before the app screens become available. Open device gallery (or Skip) starts local browsing; Connect my server opens the existing Settings connection flow. Permissions are requested by the gallery when needed. Completion is stored in the existing preferences storage, using MMKV on supported native builds and the existing SQLite/browser fallbacks. Settings → Getting started reopens the guide without resetting completion or account details.
-
-The root waits for saved preferences before choosing the first screen. Failed preference reads can retry; completion is saved before navigation so failed writes do not falsely dismiss onboarding.
+Keep credentials out of committed files. The test suite uses mocks, temporary databases, and storage stubs rather than live uploads or deletion operations.
+
+### Project layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/app/` | Expo Router screens and layouts |
+| `src/components/` | Gallery, albums, viewer, upload sheets, and shared controls |
+| `src/hooks/` | Queries and platform-aware hooks |
+| `src/providers/` | Theme, session, media viewer, gallery sync, and upload lifecycle |
+| `src/stores/` | Zustand state and persisted preferences |
+| `src/db/` | SQLite schema and local persistence |
+| `src/lib/`, `src/helpers/` | Platform adapters, API clients, and shared logic |
+| `modules/`, `plugins/` | Local native modules and Expo config plugins |
+| `tests/` | Regression tests |
+
+Use **twrnc** for app-owned layout and styling, and `useTheme()` for semantic colors. Shared `Button`, `Input`, `Switch`, and `Checkbox` controls live in `@/components/ui`: Android uses Expo UI Material controls, with React Native fallbacks for iOS and web. Production bottom sheets use `@swmansion/react-native-bottom-sheet` with a modal fallback when the native module is unavailable.
+
+The main stack includes TanStack Query for server state, Zustand for app state, FlashList for recycling, Reanimated and Gesture Handler for interactions, `expo-image` and `expo-video` for media, and sonner-native for feedback.

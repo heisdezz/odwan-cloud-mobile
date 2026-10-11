@@ -178,3 +178,10 @@ Media filters open an anchored menu. The timeline fades when idle and becomes pr
 Settings offers persistent thumbnail cache budgets of 64, 128, 256 and 512 MB, defaulting to 128 MB. Automatic eviction protects visible images, active generation and recently used previews. Inspection and deletion run in small batches after gallery gestures settle. Old previews regenerate on demand without changing original media or backup history.
 
 Build through CI to include the added haptics and keyboard modules. Device checks should cover drag selection, edge scrolling, filter changes, pinch release, keyboard movement in upload sheets, and release frame timing while uploads are active.
+
+
+## First-launch welcome
+
+A new installation opens a compact welcome screen before the app screens become available. Open device gallery (or Skip) starts local browsing; Connect my server opens the existing Settings connection flow. Permissions are requested by the gallery when needed. Completion is stored in the existing preferences storage, using MMKV on supported native builds and the existing SQLite/browser fallbacks. Settings → Getting started reopens the guide without resetting completion or account details.
+
+The root waits for saved preferences before choosing the first screen. Failed preference reads can retry; completion is saved before navigation so failed writes do not falsely dismiss onboarding.

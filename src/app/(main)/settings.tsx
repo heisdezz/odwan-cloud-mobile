@@ -200,6 +200,7 @@ export default function SettingsScreen() {
         )}
         <StorageSettings />
         <AppearanceSettings />
+        <Button label="Getting started" variant="text" onPress={() => router.push("/onboarding")} />
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );

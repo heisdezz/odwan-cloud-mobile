@@ -76,7 +76,7 @@ export function UploadQueueProvider({ children }: PropsWithChildren) {
       setPhase({ id: job.id, phase: 'preparing' });
       void updateUploadNotification(`Preparing ${job.asset.filename}`).catch(() => {});
       const token = await readUploadToken(job.serverUrl);
-      if (!token) throw new UploadError('Enter the upload token in the upload sheet, then retry.', 401);
+      if (!token) throw new UploadError('Add the upload token in Settings, then retry.', 401);
       let notifiedAt = -Infinity;
       let notifiedPercent: number | null | undefined;
       return uploadDeviceFile(job, token, signal, () => {

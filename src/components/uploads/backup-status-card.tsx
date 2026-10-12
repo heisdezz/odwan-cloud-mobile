@@ -49,7 +49,7 @@ export function BackupStatusCard({ compact = false }: { compact?: boolean }) {
       ? `${summary.data.backedUp.toLocaleString()} of ${summary.data.total.toLocaleString()} device items backed up`
       : connected
         ? "Select items in a device album to start backing up."
-        : "Open Settings to connect and sign in.";
+        : "Connect a server and sign in to track backups.";
   if (compact) return <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${detail}`} onPress={() => router.push(connected ? '/uploads/current' : '/settings')}
     style={({ pressed }) => tw.style('min-h-11 max-w-[55%] flex-row items-center gap-2 px-3 rounded-full', { backgroundColor: colors.backgroundElement, opacity: pressed ? 0.7 : 1 })}>
     <SymbolView name={{ ios: 'icloud', android: 'cloud', web: 'cloud' }} size={20} tintColor={colors.primary} />
@@ -57,12 +57,13 @@ export function BackupStatusCard({ compact = false }: { compact?: boolean }) {
   </Pressable>;
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={connected ? "button" : undefined}
       accessibilityLabel={`${title}. ${detail}`}
-      onPress={() => router.push(connected ? "/uploads/current" : "/settings")}
+      disabled={!connected}
+      onPress={() => router.push("/uploads/current")}
       style={({ pressed }) =>
         tw.style(
-          "mx-4 mb-3 px-4 py-3 rounded-2xl flex-row items-center gap-3",
+          "px-4 py-4 rounded-2xl flex-row items-center gap-3",
           {
             backgroundColor: colors.backgroundElement,
             opacity: pressed ? 0.7 : 1,
@@ -75,15 +76,15 @@ export function BackupStatusCard({ compact = false }: { compact?: boolean }) {
         size={24}
         tintColor={colors.primary}
       />
-      <View style={tw`flex-1 gap-1 flex-row items-center gap-1`}>
+      <View style={tw`flex-1 gap-1`}>
         <Text style={tw.style("text-sm font-semibold", { color: colors.text })}>
-          {/*{title}*/}
+          {title}
         </Text>
         <Text style={tw.style("text-xs", { color: colors.textSecondary })}>
           {detail}
         </Text>
       </View>
-      <SymbolView
+      {connected && <SymbolView
         name={{
           ios: "chevron.right",
           android: "chevron_right",
@@ -91,7 +92,7 @@ export function BackupStatusCard({ compact = false }: { compact?: boolean }) {
         }}
         size={18}
         tintColor={colors.textSecondary}
-      />
+      />}
     </Pressable>
   );
 }

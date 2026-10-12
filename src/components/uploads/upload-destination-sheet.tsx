@@ -85,7 +85,7 @@ export function UploadDestinationSheet({ assets, albumName, onClose, onQueued }:
         keyExtractor={(album) => album.id} contentContainerStyle={tw`px-4 pb-4 gap-1`}
         ListHeaderComponent={<View style={tw`gap-3 pb-3`}>
           <Input label="Upload token" secureTextEntry value={token} onChangeText={setTokenInput}
-            helperText="Use test_token from your server configuration. Saved for this server." />
+            helperText="Uses the token saved in Settings. Changes here are saved when you queue uploads." />
           {albumName.trim() && <DestinationRow name={`Use “${albumName}”`} detail={matching ? 'Add to the existing cloud album' : 'Create this cloud album if it does not exist'} selected={destination === 'match'} onPress={() => setDestination('match')} />}
           <DestinationRow name="Unsorted" detail="Upload without choosing a named album" selected={destination === 'unsorted'} onPress={() => setDestination('unsorted')} />
           <DestinationRow name="New album" detail="Choose a name for these uploads" selected={destination === 'new'} onPress={() => setDestination('new')} />

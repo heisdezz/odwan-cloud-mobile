@@ -47,7 +47,7 @@ bun run web
 1. Deploy or run [odwan-cloud-backend](https://github.com/heisdezz/odwan-cloud-backend).
 2. In Settings, enter its base URL and select **Test connection**. The app checks `GET /api/test/connection` for an `ok` response.
 3. Log in with a PocketBase **superuser** account. Authentication currently uses `_superusers`.
-4. To upload, enter the server's separate upload token in the destination sheet. The current upload contract uses `POST /api/test/s3/upload` and requires the backend's test routes to be enabled.
+4. After logging in, add the server's separate upload token in Settings → Uploads. You can also enter or replace it in the upload destination sheet. The current upload contract uses `POST /api/test/s3/upload` and requires the backend's test routes to be enabled.
 
 Use HTTPS for a deployed server. For LAN testing, bind the backend to a reachable interface such as `0.0.0.0:8090` and enter `http://<computer-LAN-IP>:8090`. `localhost` on a phone refers to the phone itself. The Android configuration permits cleartext HTTP for local testing.
 

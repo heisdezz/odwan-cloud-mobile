@@ -53,6 +53,18 @@ jobs:
           packages: platform-tools
       - name: Install Android build tools
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006'
+      - name: Install CMake for native modules
+        run: |
+          for attempt in 1 2 3; do
+            if sdkmanager --install 'cmake;3.22.1' && test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"; then
+              "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version
+              exit 0
+            fi
+            rm -rf "$ANDROID_HOME/cmake/3.22.1"
+            sleep "$((attempt * 5))"
+          done
+          echo '::error::Could not install Android CMake 3.22.1 after three attempts.'
+          exit 1
       - name: Generate Android project
         run: bunx expo prebuild --platform android --clean --no-install
       - uses: gradle/actions/setup-gradle@v6

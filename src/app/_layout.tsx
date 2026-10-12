@@ -41,7 +41,7 @@ function ThemedNavigation() {
   return (
     <ThemeProvider value={{ ...base, colors: { ...base.colors, background: colors.background, card: colors.backgroundElement, text: colors.text, primary: colors.primary, border: colors.outline } }}>
       <AnimatedSplashOverlay />
-      {ready ? <Stack initialRouteName="(main)" screenOptions={{ headerShown: true }}>
+      {ready ? <Stack initialRouteName={completed ? '(main)' : 'onboarding'} screenOptions={{ headerShown: true }}>
         <Stack.Protected guard={completed}>
           <Stack.Screen name="(main)" options={{ headerShown: false }} />
           <Stack.Screen name="device-album/[id]" options={{ title: 'Device album' }} />

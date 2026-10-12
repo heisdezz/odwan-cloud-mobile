@@ -16,7 +16,7 @@ Built with Expo SDK 57, React Native, and Expo Router. Android is the primary ta
 - **Uploads:** a persistent sequential queue, destination album selection or creation, progress reporting, retry controls, and separate upload history.
 - **Trash:** restore cloud items within 30 days or permanently delete them when the connected backend supports recoverable trash.
 - **Appearance:** system, light, and dark modes; dynamic Material colors on supported Android devices.
-- **First-launch welcome:** start with the device gallery or connect a server. Reopen the guide through Settings → Getting started.
+- **First-launch welcome:** swipe through three short pages about the device gallery, your server, and backups; then open the gallery or connect a server. Skip at any time, or reopen the guide through Settings → Getting started.
 
 ## Get started
 
